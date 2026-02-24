@@ -1,0 +1,148 @@
+﻿@model IEnumerable<WebApplication1.Models.Barbershop>
+
+@{
+    ViewData["Title"] = "Início";
+}
+
+<!-- Hero Section -->
+<div class="hero-section">
+    <div class="container">
+        <h1 class="fade-in"><i class="fas fa-cut"></i> Bem-vindo ao BarberLoc</h1>
+        <p class="fade-in">Encontre as melhores barbearias perto de você. Rápido, prático e conveniente!</p>
+        <a asp-controller="Barbershops" asp-action="Index" class="btn btn-primary btn-lg me-2">
+            <i class="fas fa-search"></i> Procurar Barbearias
+        </a>
+        @if (User.Identity?.IsAuthenticated != true)
+        {
+            <a asp-area="Identity" asp-page="/Account/Register" class="btn btn-outline-light btn-lg">
+                <i class="fas fa-user-plus"></i> Criar Conta
+            </a>
+        }
+    </div>
+</div>
+
+<!-- Features Section -->
+<div class="container my-5">
+    <div class="row text-center mb-5">
+        <div class="col-12">
+            <h2 class="section-title">Porquê Escolher o BarberLoc?</h2>
+        </div>
+    </div>
+    <div class="row g-4">
+        <div class="col-md-4 fade-in">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <i class="fas fa-map-marked-alt fa-3x text-accent"></i>
+                    </div>
+                    <h5 class="card-title">Localização Fácil</h5>
+                    <p class="card-text">Encontre barbearias próximas de você com base na sua localização atual.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 fade-in">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <i class="fas fa-calendar-check fa-3x text-accent"></i>
+                    </div>
+                    <h5 class="card-title">Reservas Online</h5>
+                    <p class="card-text">Reserve seu horário diretamente pela plataforma, sem complicações.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 fade-in">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <i class="fas fa-star fa-3x text-accent"></i>
+                    </div>
+                    <h5 class="card-title">Avaliações Reais</h5>
+                    <p class="card-text">Leia avaliações de outros clientes e escolha a melhor barbearia.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Rated Barbershops -->
+@if (Model != null && Model.Any())
+{
+    <div class="container my-5">
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2 class="section-title">Barbearias em Destaque</h2>
+            </div>
+        </div>
+        <div class="row g-4">
+            @foreach (var barbershop in Model)
+            {
+                <div class="col-md-4">
+                    <div class="card fade-in">
+                        @if (!string.IsNullOrEmpty(barbershop.ImageUrl))
+                        {
+                            <img src="@barbershop.ImageUrl" class="card-img-top" alt="@barbershop.Name">
+                        }
+                        else
+                        {
+                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center">
+                                <i class="fas fa-store fa-4x text-muted"></i>
+                            </div>
+                        }
+                        <div class="card-body">
+                            <h5 class="card-title">@barbershop.Name</h5>
+                            <p class="card-text">
+                                <i class="fas fa-map-marker-alt text-accent"></i> @barbershop.Address
+                            </p>
+                            <div class="rating mb-2">
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    if (i <= Math.Round(barbershop.AverageRating))
+                                    {
+                                        <i class="fas fa-star"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="far fa-star"></i>
+                                    }
+                                }
+                                <span class="text-muted ms-1">(@barbershop.Reviews.Count)</span>
+                            </div>
+                            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop.Id" 
+                               class="btn btn-primary w-100">
+                                <i class="fas fa-info-circle"></i> Ver Detalhes
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="row mt-4">
+            <div class="col-12 text-center">
+                <a asp-controller="Barbershops" asp-action="Index" class="btn btn-outline-primary btn-lg">
+                    <i class="fas fa-th"></i> Ver Todas as Barbearias
+                </a>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container my-5">
+        <div class="alert alert-info text-center">
+            <i class="fas fa-info-circle"></i> Ainda não há barbearias registadas. Volte em breve!
+        </div>
+    </div>
+}
+
+<!-- Call to Action -->
+<div class="container my-5 py-5">
+    <div class="row">
+        <div class="col-12 text-center">
+            <h3 class="mb-4">Pronto para encontrar a sua barbearia ideal?</h3>
+            <a asp-controller="Barbershops" asp-action="Index" class="btn btn-primary btn-lg">
+                <i class="fas fa-search"></i> Começar Agora
+            </a>
+        </div>
+    </div>
+</div>

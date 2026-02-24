@@ -1,0 +1,233 @@
+@model WebApplication1.Models.Barbershop
+
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+<div class="container my-5">
+    <!-- Back Button -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <a asp-action="Index" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left"></i> Voltar à Lista
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Barbershop Image -->
+        <div class="col-lg-5 mb-4">
+            @if (!string.IsNullOrEmpty(Model.ImageUrl))
+            {
+                <img src="@Model.ImageUrl" class="img-fluid rounded shadow-lg-custom" alt="@Model.Name">
+            }
+            else
+            {
+                <div class="bg-light rounded shadow-lg-custom d-flex align-items-center justify-content-center" style="height: 400px;">
+                    <i class="fas fa-store fa-8x text-muted"></i>
+                </div>
+            }
+        </div>
+
+        <!-- Barbershop Details -->
+        <div class="col-lg-7">
+            <div class="card shadow-custom">
+                <div class="card-body">
+                    <h1 class="card-title mb-3">@Model.Name</h1>
+                    
+                    <div class="rating mb-3">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            if (i <= Math.Round(Model.AverageRating))
+                            {
+                                <i class="fas fa-star fa-lg"></i>
+                            }
+                            else
+                            {
+                                <i class="far fa-star fa-lg"></i>
+                            }
+                        }
+                        <span class="ms-2">
+                            <strong>@Model.AverageRating.ToString("0.0")</strong> 
+                            (@Model.Reviews.Count @(Model.Reviews.Count == 1 ? "avaliação" : "avaliações"))
+                        </span>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Model.Description))
+                    {
+                        <p class="lead">@Model.Description</p>
+                    }
+
+                    <hr />
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-map-marker-alt text-accent"></i> Localização:</h6>
+                            <p>@Model.Address</p>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Model.PhoneNumber))
+                        {
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-phone text-accent"></i> Telefone:</h6>
+                                <p><a href="tel:@Model.PhoneNumber">@Model.PhoneNumber</a></p>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.Email))
+                        {
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-envelope text-accent"></i> Email:</h6>
+                                <p><a href="mailto:@Model.Email">@Model.Email</a></p>
+                            </div>
+                        }
+
+                        <div class="col-md-12 mt-3">
+                            <h6><i class="fas fa-map-marked-alt text-accent"></i> Mapa:</h6>
+                            <div id="map" style="height: 300px; width: 100%; border-radius: 8px; z-index: 1;"></div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Model.OpeningHours))
+                        {
+                            <div class="col-md-6 mt-3">
+                                <h6><i class="fas fa-clock text-accent"></i> Horário:</h6>
+                                <p>@Model.OpeningHours</p>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <a asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@Model.Id" 
+                           class="btn btn-primary btn-lg flex-fill">
+                            <i class="fas fa-calendar-plus"></i> Fazer Reserva
+                        </a>
+                        <a asp-controller="Reviews" asp-action="Create" asp-route-barbershopId="@Model.Id" 
+                           class="btn btn-outline-primary btn-lg flex-fill">
+                            <i class="fas fa-star"></i> Avaliar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Services Section -->
+    @if (Model.Services != null && Model.Services.Any())
+    {
+        <div class="row mt-5">
+            <div class="col-12">
+                <h3 class="mb-4"><i class="fas fa-scissors text-accent"></i> Serviços Disponíveis</h3>
+            </div>
+        </div>
+        <div class="row g-3">
+            @foreach (var service in Model.Services.Where(s => s.IsAvailable))
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                @service.Name
+                                @if (service.IsHomeService)
+                                {
+                                    <span class="badge bg-info text-dark ms-2" title="Serviço ao Domicílio">
+                                        <i class="fas fa-home"></i> Domicílio
+                                    </span>
+                                }
+                            </h5>
+                            @if (!string.IsNullOrEmpty(service.Description))
+                            {
+                                <p class="card-text text-muted">@service.Description</p>
+                            }
+                            <p class="mb-1">
+                                <strong class="text-accent">€@service.Price.ToString("0.00")</strong>
+                            </p>
+                            <p class="text-muted small">
+                                <i class="fas fa-clock"></i> @service.DurationMinutes min
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Reviews Section -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <h3 class="mb-4"><i class="fas fa-comments text-accent"></i> Avaliações</h3>
+        </div>
+    </div>
+
+    @if (Model.Reviews != null && Model.Reviews.Any())
+    {
+        <div class="row g-3">
+            @foreach (var review in Model.Reviews.OrderByDescending(r => r.CreatedAt))
+            {
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">
+                                        <i class="fas fa-user-circle text-accent"></i> 
+                                        @(review.User?.FullName ?? review.User?.UserName ?? "Anónimo")
+                                    </h6>
+                                    <div class="rating mb-2">
+                                        @for (int i = 1; i <= 5; i++)
+                                        {
+                                            if (i <= review.Rating)
+                                            {
+                                                <i class="fas fa-star"></i>
+                                            }
+                                            else
+                                            {
+                                                <i class="far fa-star"></i>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                                <small class="text-muted">@review.CreatedAt.ToString("dd/MM/yyyy")</small>
+                            </div>
+                            @if (!string.IsNullOrEmpty(review.Comment))
+                            {
+                                <p class="mb-0 mt-2">@review.Comment</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> Ainda não há avaliações para esta barbearia. Seja o primeiro a avaliar!
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            var lat = @Model.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var lng = @Model.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            
+            if (lat !== 0 && lng !== 0) {
+                var map = L.map('map').setView([lat, lng], 15);
+                
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+                
+                L.marker([lat, lng]).addTo(map)
+                    .bindPopup("<b>@Model.Name</b><br>@Model.Address")
+                    .openPopup();
+            } else {
+                document.getElementById('map').innerHTML = '<div class="d-flex justify-content-center align-items-center h-100 bg-light text-muted">Localização indisponível</div>';
+            }
+        });
+    </script>
+}

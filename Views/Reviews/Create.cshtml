@@ -1,0 +1,112 @@
+@model WebApplication1.Models.Review
+
+@{
+    ViewData["Title"] = "Avaliar Barbearia";
+    var barbershop = ViewBag.Barbershop as WebApplication1.Models.Barbershop;
+}
+
+<div class="container my-5">
+    <div class="row mb-3">
+        <div class="col-12">
+            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop?.Id" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card shadow-custom">
+                <div class="card-body p-4">
+                    <h2 class="card-title mb-4 text-center">
+                        <i class="fas fa-star text-accent"></i> Avaliar Barbearia
+                    </h2>
+
+                    @if (barbershop != null)
+                    {
+                        <div class="alert alert-info text-center">
+                            <h5><i class="fas fa-store"></i> @barbershop.Name</h5>
+                        </div>
+                    }
+
+                    <form asp-action="Create" method="post">
+                        @Html.HiddenFor(model => model.BarbershopId)
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                        <div class="mb-4">
+                            <label asp-for="Rating" class="form-label">
+                                <i class="fas fa-star"></i> Avaliação*
+                            </label>
+                            <div class="star-rating">
+                                <div class="rating-stars text-center mb-2">
+                                    @for (int i = 5; i >= 1; i--)
+                                    {
+                                        <input type="radio" name="Rating" id="star-@i" value="@i" />
+                                        <label for="star-@i" class="star-label">
+                                            <i class="fas fa-star"></i>
+                                        </label>
+                                    }
+                                </div>
+                                <p class="text-center text-muted">
+                                    <small>Clique nas estrelas para avaliar (1 a 5 estrelas)</small>
+                                </p>
+                            </div>
+                            <span asp-validation-for="Rating" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-4">
+                            <label asp-for="Comment" class="form-label">
+                                <i class="fas fa-comment"></i> Comentário (Opcional)
+                            </label>
+                            <textarea asp-for="Comment" class="form-control" rows="5" 
+                                      placeholder="Partilhe a sua experiência com outros utilizadores..."></textarea>
+                            <span asp-validation-for="Comment" class="text-danger"></span>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-check"></i> Submeter Avaliação
+                            </button>
+                            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop?.Id" 
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <style>
+        .star-rating {
+            direction: rtl;
+            unicode-bidi: bidi-override;
+        }
+        
+        .rating-stars {
+            display: inline-block;
+        }
+        
+        .star-rating input[type="radio"] {
+            display: none;
+        }
+        
+        .star-label {
+            font-size: 2.5rem;
+            color: #ddd;
+            cursor: pointer;
+            transition: color 0.2s ease;
+            margin: 0 0.25rem;
+        }
+        
+        .star-rating input[type="radio"]:checked ~ label,
+        .star-label:hover,
+        .star-label:hover ~ label {
+            color: var(--accent-color);
+        }
+    </style>
+}

@@ -1,0 +1,110 @@
+@model WebApplication1.Models.Booking
+
+@{
+    ViewData["Title"] = "Criar Reserva";
+    var barbershop = ViewBag.Barbershop as WebApplication1.Models.Barbershop;
+    var services = ViewBag.Services as List<WebApplication1.Models.Service>;
+}
+
+<div class="container my-5">
+    <div class="row mb-3">
+        <div class="col-12">
+            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop?.Id" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-custom">
+                <div class="card-body p-4">
+                    <h2 class="card-title mb-4 text-center">
+                        <i class="fas fa-calendar-plus text-accent"></i> Criar Reserva
+                    </h2>
+
+                    @if (barbershop != null)
+                    {
+                        <div class="alert alert-info">
+                            <h5><i class="fas fa-store"></i> @barbershop.Name</h5>
+                            <p class="mb-0"><i class="fas fa-map-marker-alt"></i> @barbershop.Address</p>
+                        </div>
+                    }
+
+                    <form asp-action="Create" method="post">
+                        @Html.HiddenFor(model => model.BarbershopId)
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="ServiceId" class="form-label">
+                                <i class="fas fa-scissors"></i> Serviço (Opcional)
+                            </label>
+                            <select asp-for="ServiceId" class="form-select">
+                                <option value="">-- Selecione um serviço (opcional) --</option>
+                                @if (services != null)
+                                {
+                                    @foreach (var service in services)
+                                    {
+                                        <option value="@service.Id">
+                                            @service.Name - €@service.Price.ToString("0.00") (@service.DurationMinutes min)
+                                        </option>
+                                    }
+                                }
+                            </select>
+                            <span asp-validation-for="ServiceId" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="BookingDate" class="form-label">
+                                <i class="fas fa-calendar"></i> Data da Reserva*
+                            </label>
+                            <input asp-for="BookingDate" type="date" class="form-control" 
+                                   min="@DateTime.Now.ToString("yyyy-MM-dd")" />
+                            <span asp-validation-for="BookingDate" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="BookingTime" class="form-label">
+                                <i class="fas fa-clock"></i> Hora da Reserva*
+                            </label>
+                            <input asp-for="BookingTime" type="time" class="form-control" />
+                            <span asp-validation-for="BookingTime" class="text-danger"></span>
+                            <small class="form-text text-muted">
+                                Horário de funcionamento: @(barbershop?.OpeningHours ?? "Consulte a barbearia")
+                            </small>
+                        </div>
+
+                        <div class="mb-4">
+                            <label asp-for="Notes" class="form-label">
+                                <i class="fas fa-sticky-note"></i> Notas Adicionais
+                            </label>
+                            <textarea asp-for="Notes" class="form-control" rows="4" 
+                                      placeholder="Escreva aqui qualquer informação adicional (preferências, solicitações especiais, etc.)"></textarea>
+                            <span asp-validation-for="Notes" class="text-danger"></span>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-check"></i> Confirmar Reserva
+                            </button>
+                            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop?.Id" 
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="alert alert-warning mt-4">
+                <i class="fas fa-info-circle"></i> 
+                <strong>Nota:</strong> A sua reserva ficará pendente até ser confirmada pela barbearia. 
+                Receberá uma notificação quando o estado da reserva for atualizado.
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

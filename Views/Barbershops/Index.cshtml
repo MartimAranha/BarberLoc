@@ -1,0 +1,139 @@
+@model IEnumerable<WebApplication1.Models.Barbershop>
+
+@{
+    ViewData["Title"] = "Barbearias";
+}
+
+<div class="container my-5">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h1 class="section-title"><i class="fas fa-store"></i> Barbearias</h1>
+            
+            <!-- Admin: Clear All Barbershops Button -->
+            <form asp-action="ClearAllBarbershops" method="post" onsubmit="return confirm('Tem certeza que deseja apagar TODAS as barbearias? Esta ação não pode ser desfeita.');">
+                <button type="submit" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Limpar Todas as Barbearias
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="row mb-4">
+        <div class="col-md-8 offset-md-2">
+            <form asp-action="Index" method="get" class="search-container position-relative">
+                <div class="input-group">
+                    <input type="text" name="searchString" value="@ViewData["CurrentFilter"]" 
+                           class="form-control form-control-lg" 
+                           placeholder="Pesquisar por nome ou localização..." />
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Procurar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sort Options -->
+    <div class="row mb-4">
+        <div class="col-12 text-center">
+            <div class="btn-group" role="group">
+                <a asp-action="Index" asp-route-sortOrder="" asp-route-searchString="@ViewData["CurrentFilter"]" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-sort-alpha-down"></i> Nome A-Z
+                </a>
+                <a asp-action="Index" asp-route-sortOrder="name_desc" asp-route-searchString="@ViewData["CurrentFilter"]" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-sort-alpha-up"></i> Nome Z-A
+                </a>
+                <a asp-action="Index" asp-route-sortOrder="Rating" asp-route-searchString="@ViewData["CurrentFilter"]" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-star"></i> Avaliação ↑
+                </a>
+                <a asp-action="Index" asp-route-sortOrder="rating_desc" asp-route-searchString="@ViewData["CurrentFilter"]" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-star"></i> Avaliação ↓
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barbershops Grid -->
+    @if (Model != null && Model.Any())
+    {
+        <div class="row g-4">
+            @foreach (var item in Model)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="card fade-in h-100">
+                        @if (!string.IsNullOrEmpty(item.ImageUrl))
+                        {
+                            <img src="@item.ImageUrl" class="card-img-top" alt="@item.Name">
+                        }
+                        else
+                        {
+                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center">
+                                <i class="fas fa-store fa-4x text-muted"></i>
+                            </div>
+                        }
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title">@item.Name</h5>
+                            
+                            <div class="rating mb-2">
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    if (i <= Math.Round(item.AverageRating))
+                                    {
+                                        <i class="fas fa-star"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="far fa-star"></i>
+                                    }
+                                }
+                                <span class="text-muted ms-1">
+                                    (@item.AverageRating.ToString("0.0")) - @item.Reviews.Count avaliações
+                                </span>
+                            </div>
+
+                            <p class="card-text">
+                                <i class="fas fa-map-marker-alt text-accent"></i> @item.Address
+                            </p>
+
+                            @if (!string.IsNullOrEmpty(item.Description))
+                            {
+                                <p class="card-text text-muted">
+                                    @(item.Description.Length > 100 ? item.Description.Substring(0, 100) + "..." : item.Description)
+                                </p>
+                            }
+
+                            @if (!string.IsNullOrEmpty(item.PhoneNumber))
+                            {
+                                <p class="card-text">
+                                    <i class="fas fa-phone text-accent"></i> @item.PhoneNumber
+                                </p>
+                            }
+
+                            <div class="mt-auto">
+                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-primary w-100">
+                                    <i class="fas fa-info-circle"></i> Ver Detalhes e Reservar
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-warning text-center">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Nenhuma barbearia encontrada. Tente alterar os critérios de pesquisa.
+                </div>
+            </div>
+        </div>
+    }
+</div>
