@@ -8115,11 +8115,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\2223224\\OneDrive - Escola Digital\\PAP\\WebApplication1\\WebApplication1.csproj",
+      "projectUniqueName": "C:\\Users\\2223224\\Downloads\\BarberLoc\\BarberLoc\\WebApplication1.csproj",
       "projectName": "WebApplication1",
-      "projectPath": "C:\\Users\\2223224\\OneDrive - Escola Digital\\PAP\\WebApplication1\\WebApplication1.csproj",
+      "projectPath": "C:\\Users\\2223224\\Downloads\\BarberLoc\\BarberLoc\\WebApplication1.csproj",
       "packagesPath": "C:\\Users\\2223224\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\2223224\\OneDrive - Escola Digital\\PAP\\WebApplication1\\obj\\",
+      "outputPath": "C:\\Users\\2223224\\Downloads\\BarberLoc\\BarberLoc\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

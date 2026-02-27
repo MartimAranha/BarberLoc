@@ -63,6 +63,17 @@ namespace WebApplication1.Controllers
         {
             var user = await _userManager.GetUserAsync(User);
             
+            if (!ModelState.IsValid)
+            {
+                var barbershop = await _context.Barbershops
+                    .Include(b => b.Services)
+                    .FirstOrDefaultAsync(b => b.Id == booking.BarbershopId);
+                
+                ViewBag.Barbershop = barbershop;
+                ViewBag.Services = barbershop?.Services.Where(s => s.IsAvailable).ToList();
+                return View(booking);
+            }
+
             if (user == null)
             {
                 return Challenge();

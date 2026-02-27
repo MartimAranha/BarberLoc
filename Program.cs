@@ -39,6 +39,10 @@ namespace WebApplication1
                 try
                 {
                     var context = services.GetRequiredService<ApplicationDbContext>();
+                    
+                    // Apply migrations
+                    await context.Database.MigrateAsync();
+                    
                     var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
                     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
                     

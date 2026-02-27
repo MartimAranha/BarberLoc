@@ -10,13 +10,23 @@
             
             <div class="card shadow-sm mb-4">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-3 text-success"><i class="fas fa-map-marked-alt"></i> Barbearias Reais</h6>
-                    <p class="small text-muted">
-                        Os dados são obtidos em tempo real do <strong>OpenStreetMap</strong>, 
-                        a mesma fonte usada por aplicações como Google Maps.
-                    </p>
-                    <div class="alert alert-light small mb-0">
-                        <i class="fas fa-info-circle"></i> Mostrando até 200 barbearias em Portugal
+                    <h6 class="card-subtitle mb-3 text-muted">Filtros</h6>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="checkAll" checked>
+                        <label class="form-check-label" for="checkAll">Selecionar Todos</label>
+                    </div>
+                    <hr>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input category-filter" type="checkbox" value="barbershop" id="filterBarber" checked>
+                        <label class="form-check-label" for="filterBarber">Barbearias</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input category-filter" type="checkbox" value="hair_care" id="filterSalon" checked>
+                        <label class="form-check-label" for="filterSalon">Cabeleireiros</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input category-filter" type="checkbox" value="database" id="filterPartner" checked>
+                        <label class="form-check-label" for="filterPartner">Parceiros BarberLoc</label>
                     </div>
                 </div>
             </div>
@@ -24,12 +34,10 @@
             <div class="card shadow-sm">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Legenda</h6>
-                    <ul class="list-unstyled small">
-                        <li><span class="badge bg-success rounded-circle p-1 me-2"> </span> Barbearia Real (OpenStreetMap)</li>
+                    <ul class="list-unstyled small mb-0">
+                        <li class="mb-1"><span class="badge bg-primary rounded-circle p-1 me-2" style="width: 12px; height: 12px; display: inline-block;"> </span> Resultados Google (Real)</li>
+                        <li><span class="badge bg-dark rounded-circle p-1 me-2" style="width: 12px; height: 12px; display: inline-block;"> </span> Parceiros (Base de Dados)</li>
                     </ul>
-                    <div class="alert alert-success small mb-0 mt-3">
-                        <i class="fas fa-map-marked-alt"></i> Todas as barbearias mostradas são <strong>reais</strong> e vêm diretamente do OpenStreetMap!
-                    </div>
                 </div>
             </div>
             
@@ -47,196 +55,285 @@
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-                Loading Map Data...
+                Pesquisando barbearias reais...
+            </div>
+            
+            <!-- Search Bar Over Map -->
+            <div class="position-absolute top-0 start-50 translate-middle-x mt-3" style="z-index: 1000; width: 300px;">
+                <div class="input-group shadow">
+                    <input id="pac-input" type="text" class="form-control" placeholder="Pesquisar localidade...">
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 @section Scripts {
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Replace 'YOUR_API_KEY' with your actual Google Maps API Key -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&language=pt"></script>
     
-    <style>
-        .custom-marker {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            border-radius: 50%;
-            border: 2px solid white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            color: white;
-            font-size: 14px;
-        }
-        .marker-barbershop { background-color: #2c3e50; } /* Primary */
-        .marker-hairsalon { background-color: #e74c3c; } /* Secondary/Danger */
-        .marker-unisex { background-color: #f39c12; } /* Warning */
-        .marker-osm { background-color: #27ae60; } /* Green for OSM discovered */
-    </style>
-
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            // Initialize Map (Center on Portugal)
-            var map = L.map('map').setView([39.5, -8.0], 7);
-            
-            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            }).addTo(map);
+        let map;
+        let service;
+        let infowindow;
+        let markers = [];
+        let dbMarkers = [];
+        let searchTimeout;
 
-            var allMarkers = [];
-            var locations = [];
-            var osmBarbershops = [];
+        function initMap() {
+            // Default center at Portugal
+            const portugal = { lat: 39.5, lng: -8.0 };
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 7,
+                center: portugal,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+                styles: [
+                    {
+                        "featureType": "poi.business",
+                        "stylers": [{ "visibility": "off" }]
+                    }
+                ]
+            });
 
-            // Custom Icon Function
-            function createCustomIcon(category, isFromDatabase = true) {
-                var className = 'custom-marker ';
-                var iconClass = 'fa-cut';
+            infowindow = new google.maps.InfoWindow();
+            service = new google.maps.places.PlacesService(map);
+
+            // Bounds Change Event: Search when map stops moving
+            map.addListener("idle", () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(searchNearbyBarbershops, 500);
+            });
+
+            // Initialize Search Box
+            const input = document.getElementById("pac-input");
+            const searchBox = new google.maps.places.SearchBox(input);
+            map.addListener("bounds_changed", () => {
+                searchBox.setBounds(map.getBounds());
+            });
+
+            searchBox.addListener("places_changed", () => {
+                const places = searchBox.getPlaces();
+                if (places.length == 0) return;
                 
-                if (!isFromDatabase) {
-                    // OSM discovered barbershops - use green color
-                    className += 'marker-osm';
-                    iconClass = 'fa-map-marker';
-                } else if (category === 'Barbershop') {
-                    className += 'marker-barbershop';
-                } else if (category === 'HairSalon') {
-                    className += 'marker-hairsalon';
-                    iconClass = 'fa-female';
-                } else {
-                    className += 'marker-unisex';
-                    iconClass = 'fa-venus-mars';
-                }
-
-                return L.divIcon({
-                    className: 'custom-icon-container',
-                    html: `<div class="${className}" style="width: 30px; height: 30px;"><i class="fas ${iconClass}"></i></div>`,
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15],
-                    popupAnchor: [0, -15]
+                const bounds = new google.maps.LatLngBounds();
+                places.forEach((place) => {
+                    if (!place.geometry || !place.geometry.location) return;
+                    if (place.geometry.viewport) {
+                        bounds.union(place.geometry.viewport);
+                    } else {
+                        bounds.extend(place.geometry.location);
+                    }
                 });
+                map.fitBounds(bounds);
+            });
+
+            // Initial Database Fetch
+            fetchDatabaseBarbershops();
+
+            // Set up UI listeners
+            setupUIListeners();
+        }
+
+        function searchNearbyBarbershops() {
+            if (map.getZoom() < 12) {
+                document.getElementById('mapLoading').innerHTML = '<i class="fas fa-search-plus"></i> Aumente o zoom para pesquisar';
+                document.getElementById('mapLoading').style.display = 'block';
+                return;
             }
 
-            // Fetch Barbershops from OpenStreetMap (Overpass API)
-            function fetchOSMBarbershops() {
-                // Query for barbershops and hairdressers in Portugal
-                const overpassQuery = `
-                    [out:json][timeout:25];
-                    area["ISO3166-1"="PT"][admin_level=2];
-                    (
-                        node["shop"="hairdresser"](area);
-                        node["shop"="barber"](area);
-                        way["shop"="hairdresser"](area);
-                        way["shop"="barber"](area);
-                    );
-                    out center 200;
+            document.getElementById('mapLoading').innerHTML = '<div class="spinner-border spinner-border-sm text-primary"></div> Pesquisando...';
+            document.getElementById('mapLoading').style.display = 'block';
+
+            const request = {
+                bounds: map.getBounds(),
+                type: ['barber', 'beauty_salon', 'hair_care']
+            };
+
+            service.nearbySearch(request, (results, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    clearMarkers();
+                    for (let i = 0; i < results.length; i++) {
+                        createMarker(results[i]);
+                    }
+                }
+                document.getElementById('mapLoading').style.display = 'none';
+                updateSidebar();
+            });
+        }
+
+        function createMarker(place) {
+            if (!place.geometry || !place.geometry.location) return;
+
+            const marker = new google.maps.Marker({
+                map,
+                position: place.geometry.location,
+                title: place.name,
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                },
+                category: 'google'
+            });
+
+            google.maps.event.addListener(marker, "click", () => {
+                const content = `
+                    <div class="p-2">
+                        <h6 class="mb-1">${place.name}</h6>
+                        <p class="small text-muted mb-1">${place.vicinity || ""}</p>
+                        ${place.rating ? `<div class="mb-1"><span class="badge bg-primary">${place.rating} ★</span></div>` : ""}
+                        <div class="alert alert-info py-1 px-2 mb-0 small" style="font-size: 0.7rem;">
+                            Fonte: Google Maps
+                        </div>
+                    </div>
                 `;
-                
-                const overpassUrl = 'https://overpass-api.de/api/interpreter';
-                
-                fetch(overpassUrl, {
-                    method: 'POST',
-                    body: overpassQuery
-                })
+                infowindow.setContent(content);
+                infowindow.open(map, marker);
+            });
+
+            markers.push({ 
+                marker, 
+                data: {
+                    name: place.name,
+                    address: place.vicinity,
+                    rating: place.rating,
+                    isGoogle: true
+                }
+            });
+        }
+
+        function fetchDatabaseBarbershops() {
+            fetch('/Barbershops/GetMapData')
                 .then(response => response.json())
                 .then(data => {
-                    console.log(`Found ${data.elements.length} barbershops from OpenStreetMap`);
-                    
-                    data.elements.forEach(element => {
-                        var lat, lng, name, address;
-                        
-                        if (element.type === 'node') {
-                            lat = element.lat;
-                            lng = element.lon;
-                        } else if (element.center) {
-                            lat = element.center.lat;
-                            lng = element.center.lon;
-                        }
-                        
-                        name = element.tags.name || 'Barbearia/Salão (OSM)';
-                        address = [
-                            element.tags['addr:street'],
-                            element.tags['addr:housenumber'],
-                            element.tags['addr:city']
-                        ].filter(Boolean).join(', ') || 'Endereço não disponível';
-                        
-                        var marker = L.marker([lat, lng], {
-                            icon: createCustomIcon('OSM', false),
-                            category: 'OSM'
+                    data.forEach(item => {
+                        const marker = new google.maps.Marker({
+                            position: { lat: item.lat, lng: item.lng },
+                            map,
+                            title: item.name,
+                            icon: {
+                                url: 'https://maps.google.com/mapfiles/ms/icons/black-dot.png'
+                            }
                         });
 
-                        var popupContent = `
-                            <div class="text-center">
-                                <h6>${name}</h6>
-                                <div class="mb-1"><span class="badge bg-success">Descoberto em OSM</span></div>
-                                <p class="small mb-2">${address}</p>
-                                <div class="small text-muted">
-                                    ${element.tags.phone ? '<i class="fas fa-phone"></i> ' + element.tags.phone + '<br>' : ''}
-                                    ${element.tags.website ? '<a href="' + element.tags.website + '" target="_blank">Website</a>' : ''}
+                        google.maps.event.addListener(marker, "click", () => {
+                            const content = `
+                                <div class="text-center p-2">
+                                    <h6 class="mb-1">${item.name}</h6>
+                                    <p class="small text-muted mb-2">${item.address}</p>
+                                    <div class="mb-2">
+                                        <span class="badge bg-warning text-dark">${item.rating.toFixed(1)} <i class="fas fa-star"></i></span>
+                                    </div>
+                                    <a href="/Barbershops/Details/${item.id}" class="btn btn-sm btn-primary">Ver e Reservar</a>
                                 </div>
+                            `;
+                            infowindow.setContent(content);
+                            infowindow.open(map, marker);
+                        });
+
+                        dbMarkers.push({ 
+                            marker, 
+                            data: {
+                                name: item.name,
+                                address: item.address,
+                                rating: item.rating,
+                                id: item.id,
+                                isGoogle: false
+                            }
+                        });
+                    });
+                });
+        }
+
+        function clearMarkers() {
+            markers.forEach(m => m.marker.setMap(null));
+            markers = [];
+        }
+
+        function updateSidebar() {
+            const listContainer = document.getElementById('locationsList');
+            listContainer.innerHTML = '';
+            
+            const bounds = map.getBounds();
+            let visibleCount = 0;
+
+            const allResults = [...dbMarkers, ...markers];
+            
+            allResults.forEach(item => {
+                if (bounds && bounds.contains(item.marker.getPosition())) {
+                    const isGoogleFilter = document.getElementById('checkAll').checked || (item.data.isGoogle && (document.getElementById('filterBarber').checked || document.getElementById('filterSalon').checked));
+                    const isDbFilter = document.getElementById('checkAll').checked || (!item.data.isGoogle && document.getElementById('filterPartner').checked);
+                    
+                    if (isGoogleFilter || isDbFilter) {
+                        visibleCount++;
+                        if (visibleCount > 25) return;
+
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'card mb-2 shadow-sm border-0';
+                        itemDiv.style.cursor = 'pointer';
+                        
+                        const badgeClass = item.data.isGoogle ? 'bg-primary' : 'bg-dark';
+                        const sourceName = item.data.isGoogle ? 'Google' : 'Parceiro';
+
+                        itemDiv.innerHTML = `
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h6 class="mb-0 small fw-bold">${item.data.name}</h6>
+                                    <span class="badge ${badgeClass}" style="font-size: 0.6rem;">${sourceName}</span>
+                                </div>
+                                <p class="mb-0 text-muted" style="font-size: 0.75rem;">${item.data.address || "Endereço indisponível"}</p>
                             </div>
                         `;
                         
-                        marker.bindPopup(popupContent);
-                        marker.addTo(map);
-                        allMarkers.push(marker);
-                        osmBarbershops.push({lat, lng, name, address});
-                    });
-                    
-                    console.log('OSM barbershops loaded on map');
-                })
-                .catch(error => {
-                    console.error('Error loading OSM data:', error);
-                });
-            }
-
-            // Only fetch real barbershops from OpenStreetMap (no database data)
-            document.getElementById('mapLoading').innerHTML = '<div class="spinner-border text-success" role="status"></div> Carregando barbearias reais do OpenStreetMap...';
-            
-            // Fetch OSM barbershops
-            fetchOSMBarbershops();
-            
-            // Hide loading after a delay
-            setTimeout(() => {
-                document.getElementById('mapLoading').style.display = 'none';
-            }, 5000);
-
-            // Filter Logic
-            var checkAll = document.getElementById('checkAll');
-            var categoryFilters = document.querySelectorAll('.category-filter');
-
-            function updateFilters() {
-                var selectedCategories = [];
-                categoryFilters.forEach(cb => {
-                    if (cb.checked) selectedCategories.push(cb.value);
-                });
-
-                allMarkers.forEach(marker => {
-                    var category = marker.options.category;
-                    if (selectedCategories.includes(category) || category === 'OSM') {
-                        map.addLayer(marker);
-                    } else {
-                        map.removeLayer(marker);
+                        itemDiv.onclick = () => {
+                            map.panTo(item.marker.getPosition());
+                            google.maps.event.trigger(item.marker, 'click');
+                        };
+                        
+                        listContainer.appendChild(itemDiv);
                     }
-                });
+                }
+            });
+
+            if (visibleCount === 0) {
+                listContainer.innerHTML = '<div class="text-center text-muted small mt-4">Nenhum resultado visível nesta área</div>';
             }
+        }
+
+        function setupUIListeners() {
+            const checkAll = document.getElementById('checkAll');
+            const filters = document.querySelectorAll('.category-filter');
 
             checkAll.addEventListener('change', function() {
-                var isChecked = this.checked;
-                categoryFilters.forEach(cb => {
-                    cb.checked = isChecked;
-                });
+                filters.forEach(cb => cb.checked = this.checked);
                 updateFilters();
             });
 
-            categoryFilters.forEach(cb => {
-                cb.addEventListener('change', function() {
-                    var allChecked = true;
-                    categoryFilters.forEach(c => { if(!c.checked) allChecked = false; });
-                    checkAll.checked = allChecked;
-                    
+            filters.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    checkAll.checked = Array.from(filters).every(f => f.checked);
                     updateFilters();
                 });
             });
-        });
+        }
+
+        function updateFilters() {
+            const filterBarber = document.getElementById('filterBarber').checked;
+            const filterSalon = document.getElementById('filterSalon').checked;
+            const filterPartner = document.getElementById('filterPartner').checked;
+            const checkAll = document.getElementById('checkAll').checked;
+
+            // Simple logic for this implementation:
+            // Partners: black dots
+            dbMarkers.forEach(m => m.marker.setMap((checkAll || filterPartner) ? map : null));
+            
+            // Google Results: blue dots (barber/salon)
+            markers.forEach(m => m.marker.setMap((checkAll || filterBarber || filterSalon) ? map : null));
+            
+            updateSidebar();
+        }
+
+        // Load visual representation of map
+        window.onload = initMap;
     </script>
 }
