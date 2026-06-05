@@ -25,6 +25,11 @@ namespace WebApplication1.Models
         public bool IsAvailable { get; set; } = true;
 
         public bool IsHomeService { get; set; } = false;
+        // Indicates whether the service can be provided at customer's home
+        public bool IsMobile { get; set; } = false;
+
+        // Target gender for the service: Male, Female, Unisex
+        public TargetGender TargetGender { get; set; } = TargetGender.Unisex;
         
         // Navigation property
         [ForeignKey("BarbershopId")]

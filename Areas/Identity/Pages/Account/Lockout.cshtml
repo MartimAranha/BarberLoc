@@ -1,0 +1,28 @@
+@page
+@model WebApplication1.Areas.Identity.Pages.Account.LockoutModel
+@{
+    ViewData["Title"] = "Conta bloqueada";
+}
+
+<div class="auth-page">
+    <div class="hero-section">
+        <div class="container">
+            <h1 class="mb-2">Conta bloqueada</h1>
+            <p class="lead">A sua conta foi temporariamente bloqueada por segurança.</p>
+        </div>
+    </div>
+
+    <div class="container py-5" style="margin-top: -60px;">
+        <div class="row justify-content-center">
+            <div class="col-md-7 col-lg-5">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-4 text-center">
+                        <h4 class="mb-3">Conta bloqueada</h4>
+                        <p class="small text-muted">Siga as instruções enviadas para o seu email ou contacte o suporte.</p>
+                        <a asp-area="Identity" asp-page="/Account/Login" class="btn btn-primary mt-3">Voltar ao login</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

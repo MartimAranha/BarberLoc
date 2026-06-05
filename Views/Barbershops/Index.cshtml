@@ -7,126 +7,42 @@
 <div class="container my-5">
     <div class="row mb-4">
         <div class="col-12 text-center">
-            <h1 class="section-title"><i class="fas fa-store"></i> Barbearias</h1>
+            <h1 class="section-title"><i class="fas fa-scissors text-primary"></i> Sobre o BarberLoc</h1>
+            <p class="lead mt-2">O BarberLoc ajuda-o a encontrar, reservar e gerir serviços de barbearia e cabeleireiro perto de si — de forma rápida e confiável.</p>
         </div>
     </div>
 
-    <!-- Search and Filter -->
-    <div class="row mb-4">
+    <div class="row g-4">
         <div class="col-md-8 offset-md-2">
-            <form asp-action="Index" method="get" class="search-container position-relative">
-                <div class="input-group">
-                    <input type="text" name="searchString" value="@ViewData["CurrentFilter"]" 
-                           class="form-control form-control-lg" 
-                           placeholder="Pesquisar por nome ou localização..." />
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i> Procurar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h4 class="mb-3">O que pode fazer com esta aplicação</h4>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-map-marker-alt text-accent me-2"></i><strong>Localizar</strong> barbearias e cabeleireiros na sua área com mapas e direcções.</li>
+                        <li class="mb-2"><i class="fas fa-calendar-plus text-accent me-2"></i><strong>Reservar</strong> um horário para o serviço que pretende, com confirmação pela barbearia.</li>
+                        <li class="mb-2"><i class="fas fa-motorcycle text-accent me-2"></i><strong>Serviço ao domicílio</strong> disponível quando indicado pela barbearia (taxa extra aplicável).</li>
+                        <li class="mb-2"><i class="fas fa-star text-accent me-2"></i><strong>Avaliações</strong> para ajudar a escolher o melhor profissional.</li>
+                        <li class="mb-2"><i class="fas fa-user-cog text-accent me-2"></i><strong>Gestão de perfil</strong> para atualizar os seus dados e contactos.</li>
+                    </ul>
 
-    <!-- Sort Options -->
-    <div class="row mb-4">
-        <div class="col-12 text-center">
-            <div class="btn-group" role="group">
-                <a asp-action="Index" asp-route-sortOrder="" asp-route-searchString="@ViewData["CurrentFilter"]" 
-                   class="btn btn-outline-primary">
-                    <i class="fas fa-sort-alpha-down"></i> Nome A-Z
-                </a>
-                <a asp-action="Index" asp-route-sortOrder="name_desc" asp-route-searchString="@ViewData["CurrentFilter"]" 
-                   class="btn btn-outline-primary">
-                    <i class="fas fa-sort-alpha-up"></i> Nome Z-A
-                </a>
-                <a asp-action="Index" asp-route-sortOrder="Rating" asp-route-searchString="@ViewData["CurrentFilter"]" 
-                   class="btn btn-outline-primary">
-                    <i class="fas fa-star"></i> Avaliação ↑
-                </a>
-                <a asp-action="Index" asp-route-sortOrder="rating_desc" asp-route-searchString="@ViewData["CurrentFilter"]" 
-                   class="btn btn-outline-primary">
-                    <i class="fas fa-star"></i> Avaliação ↓
-                </a>
-            </div>
-        </div>
-    </div>
+                    <h5 class="mt-4">Como começar</h5>
+                    <ol>
+                        <li>Crie uma conta ou entre com Google.</li>
+                        <li>Pesquise por barbearias ou navegue pelo mapa.</li>
+                        <li>Escolha um serviço, seleccione data e hora e confirme a reserva.</li>
+                    </ol>
 
-    <!-- Barbershops Grid -->
-    @if (Model != null && Model.Any())
-    {
-        <div class="row g-4">
-            @foreach (var item in Model)
-            {
-                <div class="col-md-6 col-lg-4">
-                    <div class="card fade-in h-100">
-                        @if (!string.IsNullOrEmpty(item.ImageUrl))
-                        {
-                            <img src="@item.ImageUrl" class="card-img-top" alt="@item.Name">
-                        }
-                        else
-                        {
-                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center">
-                                <i class="fas fa-store fa-4x text-muted"></i>
-                            </div>
-                        }
-                        <div class="card-body d-flex flex-column">
-                            <h5 class="card-title">@item.Name</h5>
-                            
-                            <div class="rating mb-2">
-                                @for (int i = 1; i <= 5; i++)
-                                {
-                                    if (i <= Math.Round(item.AverageRating))
-                                    {
-                                        <i class="fas fa-star"></i>
-                                    }
-                                    else
-                                    {
-                                        <i class="far fa-star"></i>
-                                    }
-                                }
-                                <span class="text-muted ms-1">
-                                    (@item.AverageRating.ToString("0.0")) - @item.Reviews.Count avaliações
-                                </span>
-                            </div>
+                    <h5 class="mt-4">Ajuda e contacto</h5>
+                    <p class="text-muted">Se tiver problemas ou dúvidas, contacte-nos através do email <a href="mailto:support@barberloc.example">support@barberloc.example</a> ou visite a secção de perfil para actualizar os seus dados.</p>
 
-                            <p class="card-text">
-                                <i class="fas fa-map-marker-alt text-accent"></i> @item.Address
-                            </p>
-
-                            @if (!string.IsNullOrEmpty(item.Description))
-                            {
-                                <p class="card-text text-muted">
-                                    @(item.Description.Length > 100 ? item.Description.Substring(0, 100) + "..." : item.Description)
-                                </p>
-                            }
-
-                            @if (!string.IsNullOrEmpty(item.PhoneNumber))
-                            {
-                                <p class="card-text">
-                                    <i class="fas fa-phone text-accent"></i> @item.PhoneNumber
-                                </p>
-                            }
-
-                            <div class="mt-auto">
-                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-primary w-100">
-                                    <i class="fas fa-info-circle"></i> Ver Detalhes e Reservar
-                                </a>
-                            </div>
-                        </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary">Voltar à Página Inicial</a>
+                        <a asp-action="Map" asp-controller="Barbershops" class="btn btn-primary">Ver Mapa</a>
                     </div>
                 </div>
-            }
-        </div>
-    }
-    else
-    {
-        <div class="row">
-            <div class="col-12">
-                <div class="alert alert-warning text-center">
-                    <i class="fas fa-exclamation-triangle"></i> 
-                    Nenhuma barbearia encontrada. Tente alterar os critérios de pesquisa.
-                </div>
             </div>
         </div>
-    }
+    </div>
+
+
 </div>

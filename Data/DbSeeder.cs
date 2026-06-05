@@ -50,65 +50,114 @@ namespace WebApplication1.Data
                 await userManager.AddToRoleAsync(sampleUser, "User");
             }
 
-            // Seed Barbershops and Services
-            if (!context.Barbershops.AsNoTracking().Any())
+            // Seed Barbershops and Services from Apify
+            var hasMissingPlaceIds = await context.Barbershops.AnyAsync(b => b.PlaceId == null);
+            if (!context.Barbershops.Any() || hasMissingPlaceIds)
             {
-                var barbershop = new Barbershop
+                try
                 {
-                    Name = "Barbearia Central",
-                    Description = "A melhor barbearia no centro da cidade. Estilo clássico e moderno.",
-                    Address = "Rua Augusta 123, Lisboa",
-                    Latitude = 38.7139,
-                    Longitude = -9.1394,
-                    PhoneNumber = "210000000",
-                    Email = "geral@barbeariacentral.pt",
-                    OpeningHours = "Seg-Sáb: 09:00 - 19:00",
-                    ImageUrl = "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800",
-                    Category = BarbershopCategory.Barbershop,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now
-                };
+                    // Clear existing seeded data to avoid schema mismatch/missing PlaceId
+                    if (context.Bookings.Any())
+                    {
+                        context.Bookings.RemoveRange(context.Bookings);
+                    }
+                    if (context.Reviews.Any())
+                    {
+                        context.Reviews.RemoveRange(context.Reviews);
+                    }
+                    if (context.Services.Any())
+                    {
+                        context.Services.RemoveRange(context.Services);
+                    }
+                    if (context.Barbershops.Any())
+                    {
+                        context.Barbershops.RemoveRange(context.Barbershops);
+                    }
+                    await context.SaveChangesAsync();
 
-                context.Barbershops.Add(barbershop);
-                await context.SaveChangesAsync();
+                    using var httpClient = new HttpClient();
+                    var url = "https://api.apify.com/v2/datasets/R3lD8rmitYhFrPtZT/items?token=apify_api_dkdK1JkxP4vMGAcxVfnN9NLTnENPBo1ND0AK";
+                    var response = await httpClient.GetAsync(url);
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var places = System.Text.Json.JsonSerializer.Deserialize<List<ApifyPlace>>(json, options);
+                        
+                        if (places != null)
+                        {
+                            foreach (var place in places)
+                            {
+                                // Only add if it has a valid location
+                                if (place.location == null) continue;
 
-                // Add Services for this barbershop
-                var services = new List<Service>
+                                var isSalon = place.title != null && (place.title.ToLower().Contains("salon") || place.title.ToLower().Contains("cabeleireiro"));
+                                
+                                var barbershop = new Barbershop
+                                {
+                                    Name = place.title ?? "Barbearia",
+                                    Description = !string.IsNullOrEmpty(place.website) ? $"Website: {place.website}" : null,
+                                    Address = place.address ?? "Endereço indisponível",
+                                    Latitude = place.location.lat,
+                                    Longitude = place.location.lng,
+                                    PhoneNumber = place.phone,
+                                    ImageUrl = place.imageUrl,
+                                    AverageRating = place.totalScore ?? 0,
+                                    PlaceId = place.placeId,
+                                    Category = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
+                                    IsActive = true,
+                                    CreatedAt = DateTime.Now
+                                };
+
+                                context.Barbershops.Add(barbershop);
+                                await context.SaveChangesAsync();
+
+                                // Add customized services based on Category
+                                var services = new List<Service>();
+                                if (isSalon)
+                                {
+                                    services.Add(new Service { Name = "Corte Feminino", Description = "Corte e lavagem especializada para senhora", Price = 25.00m, DurationMinutes = 45, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = true, TargetGender = TargetGender.Female });
+                                    services.Add(new Service { Name = "Corte Masculino", Description = "Corte e estilização clássica de homem", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = true, TargetGender = TargetGender.Male });
+                                    services.Add(new Service { Name = "Penteado & Styling", Description = "Penteados e secagem profissional", Price = 30.00m, DurationMinutes = 60, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = false, TargetGender = TargetGender.Female });
+                                    services.Add(new Service { Name = "Coloração Completa", Description = "Tratamento de cor premium", Price = 45.00m, DurationMinutes = 90, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = false, TargetGender = TargetGender.Female });
+                                }
+                                else
+                                {
+                                    services.Add(new Service { Name = "Corte de Cabelo", Description = "Corte moderno ou clássico com tesoura e máquina", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = true, TargetGender = TargetGender.Male });
+                                    services.Add(new Service { Name = "Aparar Barba", Description = "Barba tradicional com toalha quente e navalha", Price = 10.00m, DurationMinutes = 20, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = false, TargetGender = TargetGender.Male });
+                                    services.Add(new Service { Name = "Cabelo & Barba", Description = "Combo completo de corte e cuidado de barba", Price = 22.00m, DurationMinutes = 50, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = true, TargetGender = TargetGender.Male });
+                                    services.Add(new Service { Name = "Corte Infantil", Description = "Corte especial para crianças até 12 anos", Price = 12.00m, DurationMinutes = 25, IsAvailable = true, BarbershopId = barbershop.Id, IsMobile = true, TargetGender = TargetGender.Unisex });
+                                }
+                                context.Services.AddRange(services);
+                            }
+                            await context.SaveChangesAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
                 {
-                    new Service { Name = "Corte de Cabelo", Description = "Corte clássico ou moderno", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershop.Id },
-                    new Service { Name = "Barba", Description = "Aparar e delinear a barba", Price = 10.00m, DurationMinutes = 20, IsAvailable = true, BarbershopId = barbershop.Id },
-                    new Service { Name = "Corte e Barba", Description = "Pack completo", Price = 22.00m, DurationMinutes = 50, IsAvailable = true, BarbershopId = barbershop.Id }
-                };
-
-                context.Services.AddRange(services);
-                
-                var barbershop2 = new Barbershop
-                {
-                    Name = "Vogue Hair Studio",
-                    Description = "Salão unisexo com especialistas em coloração.",
-                    Address = "Avenida da Liberdade 456, Lisboa",
-                    Latitude = 38.7223,
-                    Longitude = -9.1450,
-                    PhoneNumber = "211111111",
-                    Email = "vogue@example.com",
-                    OpeningHours = "Ter-Sáb: 10:00 - 20:00",
-                    ImageUrl = "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800",
-                    Category = BarbershopCategory.Unisex,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now
-                };
-
-                context.Barbershops.Add(barbershop2);
-                await context.SaveChangesAsync();
-
-                context.Services.AddRange(new List<Service>
-                {
-                    new Service { Name = "Corte Feminino", Description = "Corte e lavagem", Price = 25.00m, DurationMinutes = 45, IsAvailable = true, BarbershopId = barbershop2.Id },
-                    new Service { Name = "Coloração", Description = "Coloração profissional", Price = 40.00m, DurationMinutes = 90, IsAvailable = true, BarbershopId = barbershop2.Id }
-                });
-
-                await context.SaveChangesAsync();
+                    Console.WriteLine($"Error seeding from Apify: {ex.Message}");
+                }
             }
         }
+    }
+
+    public class ApifyPlace
+    {
+        public string? title { get; set; }
+        public string? address { get; set; }
+        public ApifyLocation? location { get; set; }
+        public double? totalScore { get; set; }
+        public string? imageUrl { get; set; }
+        public string? phone { get; set; }
+        public string? website { get; set; }
+        public string? placeId { get; set; }
+    }
+
+    public class ApifyLocation
+    {
+        public double lat { get; set; }
+        public double lng { get; set; }
     }
 }

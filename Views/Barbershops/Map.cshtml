@@ -17,17 +17,30 @@
                     </div>
                     <hr>
                     <div class="form-check mb-2">
-                        <input class="form-check-input category-filter" type="checkbox" value="barbershop" id="filterBarber" checked>
+                        <input class="form-check-input category-filter" type="checkbox" value="Barbershop" id="filterBarber" checked>
                         <label class="form-check-label" for="filterBarber">Barbearias</label>
                     </div>
                     <div class="form-check mb-2">
-                        <input class="form-check-input category-filter" type="checkbox" value="hair_care" id="filterSalon" checked>
+                        <input class="form-check-input category-filter" type="checkbox" value="HairSalon" id="filterSalon" checked>
                         <label class="form-check-label" for="filterSalon">Cabeleireiros</label>
                     </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input category-filter" type="checkbox" value="database" id="filterPartner" checked>
-                        <label class="form-check-label" for="filterPartner">Parceiros BarberLoc</label>
+                <hr>
+                <h6 class="card-subtitle mb-2 text-muted">Serviço em Casa</h6>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="mobileOnly">
+                    <label class="form-check-label" for="mobileOnly">Mostrar só com atendimento em casa</label>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Género</label>
+                    <div class="d-flex gap-2">
+                        <select id="genderSelect" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="Male">Masculino</option>
+                            <option value="Female">Feminino</option>
+                            <option value="Unisex">Unisexo</option>
+                        </select>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -35,12 +48,14 @@
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Legenda</h6>
                     <ul class="list-unstyled small mb-0">
-                        <li class="mb-1"><span class="badge bg-primary rounded-circle p-1 me-2" style="width: 12px; height: 12px; display: inline-block;"> </span> Resultados Google (Real)</li>
-                        <li><span class="badge bg-dark rounded-circle p-1 me-2" style="width: 12px; height: 12px; display: inline-block;"> </span> Parceiros (Base de Dados)</li>
+                        <li class="mb-1"><span class="badge bg-primary rounded-circle p-1 me-2" style="width: 12px; height: 12px; display: inline-block;"> </span> Resultados Google Maps</li>
                     </ul>
                 </div>
             </div>
-            
+
+            <!-- Place details panel (persistent) -->
+            <div id="placeDetails" class="mt-4" style="display:none;"></div>
+
             <div id="locationsList" class="mt-4">
                 <!-- List of visible locations will be populated here -->
             </div>
@@ -49,19 +64,25 @@
         <!-- Map Container -->
         <div class="col-md-9 position-relative">
             <div id="map" style="height: calc(100vh - 56px); width: 100%;"></div>
+
+            <!-- My Location Button (Styled like Google Maps GPS button) -->
+            <button id="locateBtn" class="btn btn-light position-absolute rounded-circle shadow d-flex align-items-center justify-content-center" 
+                    style="z-index:1001; top: 1rem; right: 1rem; width: 44px; height: 44px; padding: 0; border: 1px solid rgba(0,0,0,0.1);" 
+                    title="Minha Localização">
+                <i class="fas fa-crosshairs text-primary" style="font-size: 1.25rem;"></i>
+            </button>
             
             <!-- Loading Overlay -->
-            <div id="mapLoading" class="position-absolute top-50 start-50 translate-middle bg-white p-3 rounded shadow" style="z-index: 1000;">
+            <div id="mapLoading" class="position-absolute top-50 start-50 translate-middle bg-white p-3 rounded shadow" style="z-index: 1000; display: none;">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-                Pesquisando barbearias reais...
+                Pesquisando barbearias...
             </div>
-            
-            <!-- Search Bar Over Map -->
-            <div class="position-absolute top-0 start-50 translate-middle-x mt-3" style="z-index: 1000; width: 300px;">
-                <div class="input-group shadow">
-                    <input id="pac-input" type="text" class="form-control" placeholder="Pesquisar localidade...">
+            <!-- Debug panel (hidden by default) -->
+            <div id="debugPanel" class="position-absolute" style="z-index:1100; top:1rem; left:1rem; min-width:220px; max-width:320px; display:none;">
+                <div class="card bg-light shadow-sm">
+                    <div class="card-body p-2 small text-danger" id="debugContent"></div>
                 </div>
             </div>
         </div>
@@ -69,229 +90,581 @@
 </div>
 
 @section Scripts {
-    <!-- Replace 'YOUR_API_KEY' with your actual Google Maps API Key -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&language=pt"></script>
-    
+    <!-- Google Maps API Key inserted; ensure Places API is enabled and billing is configured in the Google Cloud Console -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCJoTK0cIqbOH8H1P_Z_cYHaMs44FcM6e8&libraries=places,geometry&language=pt"></script>
+
     <script>
+        // Ensure geometry library is loaded for computeDistanceBetween usage
+        if (!google.maps.geometry) {
+            console.warn('Google Maps geometry library not available — distance checks will be less accurate.');
+        }
         let map;
-        let service;
         let infowindow;
-        let markers = [];
-        let dbMarkers = [];
-        let searchTimeout;
+        let placesService;
+        let placesMarkers = [];
+        let placesIndex = {};
+        // keep track of the currently open place (to restore after searches)
+        let activePlaceId = null;
+        // Server-sourced markers
+        let serverMarkers = [];
+        // User location marker and accuracy circle
+        let userMarker = null;
+        let accuracyCircle = null;
+        let geoWatchId = null;
 
         function initMap() {
-            // Default center at Portugal
-            const portugal = { lat: 39.5, lng: -8.0 };
+            const portugal = { lat: 41.3, lng: -6.7 };
             map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 7,
+                zoom: 12,
                 center: portugal,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                styles: [
-                    {
-                        "featureType": "poi.business",
-                        "stylers": [{ "visibility": "off" }]
-                    }
-                ]
+                mapTypeControl: true,
+                streetViewControl: true,
+                fullscreenControl: true,
+                zoomControl: true
             });
 
             infowindow = new google.maps.InfoWindow();
-            service = new google.maps.places.PlacesService(map);
-
-            // Bounds Change Event: Search when map stops moving
-            map.addListener("idle", () => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(searchNearbyBarbershops, 500);
+            placesService = new google.maps.places.PlacesService(map);
+            // clear active place when the InfoWindow is closed by the user
+            infowindow.addListener('closeclick', () => {
+                activePlaceId = null;
             });
 
-            // Initialize Search Box
-            const input = document.getElementById("pac-input");
-            const searchBox = new google.maps.places.SearchBox(input);
-            map.addListener("bounds_changed", () => {
-                searchBox.setBounds(map.getBounds());
-            });
-
-            searchBox.addListener("places_changed", () => {
-                const places = searchBox.getPlaces();
-                if (places.length == 0) return;
-                
-                const bounds = new google.maps.LatLngBounds();
-                places.forEach((place) => {
-                    if (!place.geometry || !place.geometry.location) return;
-                    if (place.geometry.viewport) {
-                        bounds.union(place.geometry.viewport);
-                    } else {
-                        bounds.extend(place.geometry.location);
+            // Search when the map stops moving (debounced)
+            let idleTimer;
+            let lastCenter = map.getCenter();
+            let lastZoom = map.getZoom();
+            map.addListener('idle', () => {
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => {
+                    // Only re-search if center or zoom changed significantly
+                    const c = map.getCenter();
+                    const z = map.getZoom();
+                    const dist = lastCenter ? google.maps.geometry.spherical.computeDistanceBetween(lastCenter, c) : 9999;
+                    if (!lastCenter || dist > 50 || Math.abs(z - lastZoom) >= 1) {
+                        lastCenter = c;
+                        lastZoom = z;
+                        // only trigger search if user is logged out or logged in? ensure server doesn't require auth
+                        try {
+                            searchPlacesInBounds();
+                        } catch (e) {
+                            console.warn('searchPlacesInBounds failed', e);
+                            const dbg = document.getElementById('debugContent');
+                            if (dbg) { dbg.textContent = 'Search failed: ' + (e.message || e); document.getElementById('debugPanel').style.display = 'block'; }
+                        }
                     }
-                });
-                map.fitBounds(bounds);
+                }, 600);
             });
 
-            // Initial Database Fetch
-            fetchDatabaseBarbershops();
-
-            // Set up UI listeners
             setupUIListeners();
-        }
-
-        function searchNearbyBarbershops() {
-            if (map.getZoom() < 12) {
-                document.getElementById('mapLoading').innerHTML = '<i class="fas fa-search-plus"></i> Aumente o zoom para pesquisar';
-                document.getElementById('mapLoading').style.display = 'block';
-                return;
+            // initial search
+            searchPlacesInBounds();
+            // attempt to auto-locate the user on map load
+            if (navigator && navigator.geolocation) {
+                locateUser();
             }
 
-            document.getElementById('mapLoading').innerHTML = '<div class="spinner-border spinner-border-sm text-primary"></div> Pesquisando...';
-            document.getElementById('mapLoading').style.display = 'block';
-
-            const request = {
-                bounds: map.getBounds(),
-                type: ['barber', 'beauty_salon', 'hair_care']
-            };
-
-            service.nearbySearch(request, (results, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-                    clearMarkers();
-                    for (let i = 0; i < results.length; i++) {
-                        createMarker(results[i]);
-                    }
-                }
-                document.getElementById('mapLoading').style.display = 'none';
-                updateSidebar();
-            });
-        }
-
-        function createMarker(place) {
-            if (!place.geometry || !place.geometry.location) return;
-
-            const marker = new google.maps.Marker({
-                map,
-                position: place.geometry.location,
-                title: place.name,
-                icon: {
-                    url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                },
-                category: 'google'
-            });
-
-            google.maps.event.addListener(marker, "click", () => {
-                const content = `
-                    <div class="p-2">
-                        <h6 class="mb-1">${place.name}</h6>
-                        <p class="small text-muted mb-1">${place.vicinity || ""}</p>
-                        ${place.rating ? `<div class="mb-1"><span class="badge bg-primary">${place.rating} ★</span></div>` : ""}
-                        <div class="alert alert-info py-1 px-2 mb-0 small" style="font-size: 0.7rem;">
-                            Fonte: Google Maps
-                        </div>
-                    </div>
-                `;
-                infowindow.setContent(content);
-                infowindow.open(map, marker);
-            });
-
-            markers.push({ 
-                marker, 
-                data: {
-                    name: place.name,
-                    address: place.vicinity,
-                    rating: place.rating,
-                    isGoogle: true
+            // Listen for POI clicks to show reviews in-app instead of Google Maps external link
+            map.addListener('click', (event) => {
+                if (event.placeId) {
+                    event.stop(); // Prevent default Google Maps info window
+                    showGooglePOIInfo(event.placeId, event.latLng);
                 }
             });
-        }
-
-        function fetchDatabaseBarbershops() {
-            fetch('/Barbershops/GetMapData')
-                .then(response => response.json())
-                .then(data => {
-                    data.forEach(item => {
-                        const marker = new google.maps.Marker({
-                            position: { lat: item.lat, lng: item.lng },
-                            map,
-                            title: item.name,
-                            icon: {
-                                url: 'https://maps.google.com/mapfiles/ms/icons/black-dot.png'
-                            }
-                        });
-
-                        google.maps.event.addListener(marker, "click", () => {
-                            const content = `
-                                <div class="text-center p-2">
-                                    <h6 class="mb-1">${item.name}</h6>
-                                    <p class="small text-muted mb-2">${item.address}</p>
-                                    <div class="mb-2">
-                                        <span class="badge bg-warning text-dark">${item.rating.toFixed(1)} <i class="fas fa-star"></i></span>
-                                    </div>
-                                    <a href="/Barbershops/Details/${item.id}" class="btn btn-sm btn-primary">Ver e Reservar</a>
-                                </div>
-                            `;
-                            infowindow.setContent(content);
-                            infowindow.open(map, marker);
-                        });
-
-                        dbMarkers.push({ 
-                            marker, 
-                            data: {
-                                name: item.name,
-                                address: item.address,
-                                rating: item.rating,
-                                id: item.id,
-                                isGoogle: false
-                            }
-                        });
-                    });
-                });
         }
 
         function clearMarkers() {
-            markers.forEach(m => m.marker.setMap(null));
-            markers = [];
+            placesMarkers.forEach(m => m.setMap(null));
+            placesMarkers = [];
+            placesIndex = {};
+            
+            // Clear server markers to fix duplication bug
+            serverMarkers.forEach(s => {
+                if (s.marker) s.marker.setMap(null);
+            });
+            serverMarkers = [];
+
+            // Do not clear activePlaceId here — we want to preserve the currently open info window
+        }
+
+        async function searchPlacesInBounds() {
+            const loading = document.getElementById('mapLoading');
+            loading.style.display = 'block';
+
+            // Determine selected categories
+            const filterBarber = document.getElementById('filterBarber').checked;
+            const filterSalon = document.getElementById('filterSalon').checked;
+            const categories = [];
+            if (filterBarber) categories.push('Barbershop');
+            if (filterSalon) categories.push('HairSalon');
+
+            clearMarkers();
+
+            try {
+                let url = '/Barbershops/GetMapData?categories=' + encodeURIComponent(categories.join(','));
+
+                if (userMarker && userMarker.getPosition) {
+                    const pos = userMarker.getPosition();
+                    url += '&lat=' + pos.lat() + '&lng=' + pos.lng() + '&radiusKm=10';
+                } else {
+                    // No location -> recommend only well rated
+                    url += '&minRating=4.0';
+                }
+
+                const resp = await fetch(url + '&genders=' + encodeURIComponent(getSelectedGenders()) + '&mobileOnly=' + (document.getElementById('mobileOnly') ? document.getElementById('mobileOnly').checked : false), { credentials: 'same-origin' });
+                if (!resp.ok) {
+                    // handle unauthorized or server redirect to login
+                    const dbg = document.getElementById('debugContent');
+                    if (resp.status === 401 || resp.status === 403) {
+                        if (dbg) dbg.textContent = 'Os dados do mapa requerem autenticação. Faça login para ver as barbearias.';
+                    } else {
+                        if (dbg) dbg.textContent = 'Erro ao obter dados do servidor para o mapa. Código: ' + resp.status;
+                    }
+                    const dp = document.getElementById('debugPanel'); if (dp) dp.style.display = 'block';
+                    showMapAuthBanner(resp.status);
+                    // keep existing markers if any and exit gracefully
+                    return;
+                }
+
+                // Parse response robustly: avoid exceptions when server returns HTML (login page)
+                const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+                let places = [];
+                try {
+                    if (contentType.includes('application/json')) {
+                        places = await resp.json();
+                    } else {
+                        const txt = await resp.text();
+                        const dbg = document.getElementById('debugContent');
+                        if (dbg) dbg.textContent = 'Resposta do servidor inesperada (não JSON). Possível redirecionamento para login.' + (txt ? '\n' + txt.substring(0, 300) : '');
+                        const dp = document.getElementById('debugPanel'); if (dp) dp.style.display = 'block';
+                        showMapAuthBanner();
+                        // no places to render
+                        places = [];
+                    }
+                } catch (ex) {
+                    console.error('Failed to parse GetMapData response', ex);
+                    const dbg = document.getElementById('debugContent'); if (dbg) dbg.textContent = 'Erro ao analisar resposta do servidor: ' + (ex.message || ex);
+                    const dp = document.getElementById('debugPanel'); if (dp) dp.style.display = 'block';
+                    places = [];
+                }
+
+                // create markers for server results
+                const bounds = new google.maps.LatLngBounds();
+                places.forEach(p => {
+                    if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+                    const pos = new google.maps.LatLng(p.lat, p.lng);
+                    const marker = new google.maps.Marker({
+                        position: pos,
+                        map: map,
+                        title: p.name
+                    });
+
+                    marker.addListener('click', () => {
+                        showServerPlaceInfo(p, marker);
+                        // also populate the persistent side panel
+                        renderPlaceDetailsPanel(p);
+                    });
+
+                    serverMarkers.push({ marker: marker, data: p });
+                    bounds.extend(pos);
+                });
+
+                // If a place was open before the search, try to re-open its InfoWindow using the new marker
+                if (activePlaceId) {
+                    const reopened = serverMarkers.find(s => s.data && s.data.id == activePlaceId);
+                    if (reopened) {
+                        // reopen info window for the same place
+                        try {
+                            showServerPlaceInfo(reopened.data, reopened.marker);
+                        } catch (e) {
+                            console.warn('Failed to re-open active place info', e);
+                        }
+                    } else {
+                        // if not found, clear the active id
+                        activePlaceId = null;
+                    }
+                }
+
+                // Only fit bounds if we have more than one result and user marker isn't present
+                if (!bounds.isEmpty()) {
+                    try {
+                        if (places.length > 1 && !(userMarker && userMarker.getPosition())) {
+                            map.fitBounds(bounds);
+                        } else if (places.length > 1 && userMarker && userMarker.getPosition()) {
+                            // extend but don't change zoom/center dramatically
+                            // keep current center/zoom
+                        }
+                    } catch (e) {
+                        console.warn(e);
+                    }
+                }
+
+                updateSidebar();
+            } catch (ex) {
+                console.error(ex);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function showServerPlaceInfo(place, marker) {
+            try {
+                // mark this as the currently active place so searches won't close it
+                activePlaceId = place.id || null;
+            } catch (e) { activePlaceId = null; }
+
+            // Render flow encapsulated so we can resolve a missing placeId first
+            const renderWithData = () => {
+                const panoId = 'svPanorama_' + Math.random().toString(36).substr(2, 9);
+                const mapsUrl = place.placeId ? ('https://www.google.com/maps/place/?q=place_id:' + encodeURIComponent(place.placeId)) : ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(place.name + ' ' + place.address));
+
+                function buildContent(detailsInfo, reviewsHtml) {
+                    const phoneHtml = detailsInfo && detailsInfo.formatted_phone_number ? `<div class="mb-1"><a href=\"tel:${detailsInfo.formatted_phone_number}\" class=\"small\">${detailsInfo.formatted_phone_number}</a></div>` : '';
+                    const hoursHtml = detailsInfo && detailsInfo.opening_hours && detailsInfo.opening_hours.weekday_text ? `<div class=\"small text-muted mb-1\">${detailsInfo.opening_hours.weekday_text.slice(0,3).join(' / ')}</div>` : '';
+                    const websiteHtml = detailsInfo && detailsInfo.website ? `<div class=\"mt-1\"><a target=\"_blank\" href=\"${detailsInfo.website}\" class=\"small\">Visitar site</a></div>` : '';
+                    const photoHtml = detailsInfo && detailsInfo.photos && detailsInfo.photos.length ? `<div class=\"mb-2 text-center\"><img src=\"${detailsInfo.photos[0]}\" alt=\"${place.name}\" style=\"max-width:100%; max-height:120px; object-fit:cover;\"/></div>` : (place.image ? `<div class=\"mb-2 text-center\"><img src=\"${place.image}\" alt=\"${place.name}\" style=\"max-width:100%; max-height:120px; object-fit:cover;\"/></div>` : '');
+
+                    const content = `
+                        <div class="p-2 text-start">
+                            ${photoHtml}
+                            <h6 class="mb-1">${place.name}</h6>
+                            <p class="small text-muted mb-2">${place.address || ''}</p>
+                            <div class="mb-2">${(typeof place.rating === 'number' && place.rating>0) ? `<span class=\"badge bg-warning text-dark\">${place.rating.toFixed(1)} <i class=\"fas fa-star\"></i></span>` : ''}</div>
+                            ${phoneHtml}
+                            ${hoursHtml}
+                            ${websiteHtml}
+                            <a href="/Barbershops/Details/${place.id}" class="btn btn-sm btn-primary mt-1">Ver detalhes</a>
+                            <div id="${panoId}" class="mt-2" style="width:100%; height:140px; background:#f5f5f5; display:flex; align-items:center; justify-content:center;">
+                                <a target="_blank" href="${mapsUrl}" class="small">Visualize no Google Maps</a>
+                            </div>
+                            ${reviewsHtml || ''}
+                        </div>
+                    `;
+
+                    infowindow.setContent(content);
+                    infowindow.open(map, marker);
+
+                    // After open, try loading Street View panorama into the container
+                    try {
+                        const svService = new google.maps.StreetViewService();
+                        const loc = marker.getPosition();
+                        svService.getPanorama({ location: loc, radius: 100 }, (result, status) => {
+                            const el = document.getElementById(panoId);
+                            if (!el) return;
+                            if (status === google.maps.StreetViewStatus.OK && result && result.location) {
+                                new google.maps.StreetViewPanorama(el, { pano: result.location.pano, pov: { heading: 270, pitch: 0 }, disableDefaultUI: true });
+                            }
+                        });
+                    } catch (ex) { console.warn('StreetView load failed', ex); }
+                }
+
+                // fetch cached reviews first
+                fetch('/Barbershops/GetReviews?placeId=' + encodeURIComponent(place.placeId || ''))
+                    .then(r => r.json())
+                    .then(data => {
+                        let reviewsHtml = '';
+                        if (data && data.success && data.reviews) {
+                            try {
+                                const j = typeof data.reviews === 'string' ? JSON.parse(data.reviews) : data.reviews;
+                                if (j.result && j.result.reviews) {
+                                    reviewsHtml = '<div class="mt-2 small">';
+                                    j.result.reviews.slice(0,3).forEach(rv => {
+                                        reviewsHtml += `<div class="mb-1"><strong>${rv.author_name}</strong>: ${rv.text.substring(0,120)}${rv.text.length>120?'...':''}</div>`;
+                                    });
+                                    reviewsHtml += '</div>';
+                                }
+                            } catch (ex) { console.warn(ex); }
+                        }
+                        buildContent(null, reviewsHtml);
+
+                        // attempt to get richer place details via PlacesService if placeId exists
+                        if (place.placeId && typeof placesService !== 'undefined' && placesService) {
+                            try {
+                                placesService.getDetails({ placeId: place.placeId, fields: ['name','formatted_address','formatted_phone_number','opening_hours','website','photos','rating','url'] }, (details, status) => {
+                                    if (status === google.maps.places.PlacesServiceStatus.OK && details) {
+                                        const photos = details.photos && details.photos.length ? details.photos.map(p => p.getUrl({ maxWidth: 400 })) : [];
+                                        const detailsInfo = {
+                                            formatted_phone_number: details.formatted_phone_number,
+                                            opening_hours: details.opening_hours,
+                                            website: details.website,
+                                            photos: photos
+                                        };
+                                        buildContent(detailsInfo, reviewsHtml);
+                                    }
+                                });
+                            } catch (ex) { console.warn('places.getDetails failed', ex); }
+                        }
+                    })
+                    .catch(err => {
+                        buildContent(null, '');
+                    });
+            };
+
+            // If we don't have a placeId, try to find one using Places findPlaceFromQuery and then render
+            if ((!place.placeId || place.placeId === '') && typeof placesService !== 'undefined' && placesService) {
+                try {
+                    const query = (place.name || '') + ' ' + (place.address || '');
+                    placesService.findPlaceFromQuery({ input: query, fields: ['place_id'] }, (res, status) => {
+                        if (status === google.maps.places.PlacesServiceStatus.OK && res && res.length) {
+                            place.placeId = res[0].place_id;
+                        }
+                        renderWithData();
+                    });
+                } catch (ex) {
+                    console.warn('findPlaceFromQuery failed', ex);
+                    renderWithData();
+                }
+            } else {
+                renderWithData();
+            }
+            const address = place.address || '';
+            const rating = (typeof place.rating === 'number' && place.rating > 0) ? `<span class="badge bg-warning text-dark">${place.rating.toFixed(1)} <i class="fas fa-star"></i></span>` : '';
+            const detailsLink = '/Barbershops/Details/' + (place.id || '');
+            const imageHtml = place.image ? `<div class="mb-2 text-center"><img src="${place.image}" alt="${place.name}" style="max-width:100%; max-height:120px; object-fit:cover;"/></div>` : '';
+
+            // Prepare a container for Street View panorama (if available) and a fallback link to Google Maps
+            const panoId = 'svPanorama_' + Math.random().toString(36).substr(2, 9);
+            const mapsUrl = place.placeId ? ('https://www.google.com/maps/place/?q=place_id:' + encodeURIComponent(place.placeId)) : ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address));
+
+            // Helper to build and set content (can be called twice: initial + after places details)
+            function buildContent(detailsInfo, reviewsHtml) {
+                const phoneHtml = detailsInfo && detailsInfo.formatted_phone_number ? `<div class="mb-1"><a href=\"tel:${detailsInfo.formatted_phone_number}\" class=\"small\">${detailsInfo.formatted_phone_number}</a></div>` : '';
+                const hoursHtml = detailsInfo && detailsInfo.opening_hours && detailsInfo.opening_hours.weekday_text ? `<div class=\"small text-muted mb-1\">${detailsInfo.opening_hours.weekday_text.slice(0,3).join(' / ')}</div>` : '';
+                const websiteHtml = detailsInfo && detailsInfo.website ? `<div class=\"mt-1\"><a target=\"_blank\" href=\"${detailsInfo.website}\" class=\"small\">Visitar site</a></div>` : '';
+                const photoHtml = detailsInfo && detailsInfo.photos && detailsInfo.photos.length ? `<div class=\"mb-2 text-center\"><img src=\"${detailsInfo.photos[0]}\" alt=\"${place.name}\" style=\"max-width:100%; max-height:120px; object-fit:cover;\"/></div>` : imageHtml;
+                const content = `
+                    <div class="p-2 text-start">
+                        ${photoHtml}
+                        <h6 class="mb-1">${place.name}</h6>
+                        <p class="small text-muted mb-2">${address}</p>
+                        <div class="mb-2">${rating}</div>
+                        ${phoneHtml}
+                        ${hoursHtml}
+                        ${websiteHtml}
+                        <a href="${detailsLink}" class="btn btn-sm btn-primary mt-1">Ver detalhes</a>
+                        <div id="${panoId}" class="mt-2" style="width:100%; height:140px; background:#f5f5f5; display:flex; align-items:center; justify-content:center;">
+                            <a target="_blank" href="${mapsUrl}" class="small">Visualize no Google Maps</a>
+                        </div>
+                        ${reviewsHtml || ''}
+                    </div>
+                `;
+
+                infowindow.setContent(content);
+                infowindow.open(map, marker);
+            }
+
+            // Initial render (with server image or placeholder) and server reviews
+            fetch('/Barbershops/GetReviews?placeId=' + encodeURIComponent(place.placeId || ''))
+                .then(r => r.json())
+                .then(data => {
+                    let reviewsHtml = '';
+                    if (data && data.success && data.reviews) {
+                        try {
+                            const j = typeof data.reviews === 'string' ? JSON.parse(data.reviews) : data.reviews;
+                            if (j.result && j.result.reviews) {
+                                reviewsHtml = '<div class="mt-2 small">';
+                                j.result.reviews.slice(0,3).forEach(rv => {
+                                    reviewsHtml += `<div class="mb-1"><strong>${rv.author_name}</strong>: ${rv.text.substring(0,120)}${rv.text.length>120?'...':''}</div>`;
+                                });
+                                reviewsHtml += '</div>';
+                            }
+                        } catch (ex) {
+                            console.warn(ex);
+                        }
+                    }
+
+                    buildContent(null, reviewsHtml);
+
+                    // After basic render, try fetching Google Places details for richer info
+                    if (place.placeId && typeof placesService !== 'undefined' && placesService) {
+                        try {
+                            placesService.getDetails({ placeId: place.placeId, fields: ['name','formatted_address','formatted_phone_number','opening_hours','website','photos','rating','url'] }, (details, status) => {
+                                if (status === google.maps.places.PlacesServiceStatus.OK && details) {
+                                    // prepare photo urls
+                                    const photos = details.photos && details.photos.length ? details.photos.map(p => p.getUrl({ maxWidth: 400 })) : [];
+                                    const detailsInfo = {
+                                        formatted_phone_number: details.formatted_phone_number,
+                                        opening_hours: details.opening_hours,
+                                        website: details.website,
+                                        photos: photos
+                                    };
+                                    buildContent(detailsInfo, reviewsHtml);
+
+                                    // Try to load Street View in pano container
+                                    const sv = new google.maps.StreetViewService();
+                                    const loc = marker.getPosition();
+                                    sv.getPanorama({ location: loc, radius: 100 }, (result, svStatus) => {
+                                        const el = document.getElementById(panoId);
+                                        if (!el) return;
+                                        if (svStatus === google.maps.StreetViewStatus.OK && result && result.location) {
+                                            new google.maps.StreetViewPanorama(el, { pano: result.location.pano, pov: { heading: 270, pitch: 0 }, disableDefaultUI: true });
+                                        }
+                                    });
+                                }
+                            });
+                        } catch (ex) { console.warn('places.getDetails failed', ex); }
+                    }
+                })
+                .catch(err => {
+                    // render fallback content
+                    buildContent(null, '');
+                });
+        }
+
+        function showGooglePOIInfo(placeId, latLng) {
+            const loading = document.getElementById('mapLoading');
+            if (loading) loading.style.display = 'block';
+
+            placesService.getDetails({
+                placeId: placeId,
+                fields: ['name', 'formatted_address', 'rating', 'reviews', 'photos', 'formatted_phone_number']
+            }, (place, status) => {
+                if (loading) loading.style.display = 'none';
+
+                if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                    const address = place.formatted_address || '';
+                    
+                    // Star rating HTML
+                    let ratingHtml = '';
+                    if (typeof place.rating === 'number' && place.rating > 0) {
+                        ratingHtml = `<div class="rating mb-2">`;
+                        for (let i = 1; i <= 5; i++) {
+                            if (i <= Math.round(place.rating)) {
+                                ratingHtml += '<i class="fas fa-star"></i>';
+                            } else {
+                                ratingHtml += '<i class="far fa-star"></i>';
+                            }
+                        }
+                        ratingHtml += ` <span class="text-muted ms-1">(${place.rating.toFixed(1)})</span></div>`;
+                    }
+
+                    // First photo HTML
+                    let imageHtml = '';
+                    if (place.photos && place.photos.length > 0) {
+                        const photoUrl = place.photos[0].getUrl({ maxWidth: 300, maxHeight: 150 });
+                        imageHtml = `<div class="mb-2 text-center"><img src="${photoUrl}" alt="${place.name}" style="max-width:100%; max-height:120px; object-fit:cover; border-radius: 8px;"/></div>`;
+                    }
+
+                    // Reviews HTML (showing top 3 reviews in-app)
+                    let reviewsHtml = '';
+                    if (place.reviews && place.reviews.length > 0) {
+                        reviewsHtml = '<div class="mt-2 pt-2 border-top small" style="max-height: 125px; overflow-y: auto;">';
+                        place.reviews.slice(0, 3).forEach(rv => {
+                            let stars = '★'.repeat(rv.rating) + '☆'.repeat(5 - rv.rating);
+                            reviewsHtml += `<div class="mb-2" style="border-bottom:1px solid #f0f0f0; padding-bottom:4px;">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong style="font-size:0.75rem;">${rv.author_name}</strong>
+                                    <span class="text-warning" style="font-size:0.7rem;">${stars}</span>
+                                </div>
+                                <div class="text-muted" style="font-size:0.7rem; line-height:1.25;">${rv.text.substring(0, 100)}${rv.text.length > 100 ? '...' : ''}</div>
+                            </div>`;
+                        });
+                        reviewsHtml += '</div>';
+                    } else {
+                        reviewsHtml = '<div class="mt-2 pt-2 border-top small text-muted text-center">Sem comentários disponíveis no Google Maps.</div>';
+                    }
+
+                    // Action buttons
+                    const phoneButton = place.formatted_phone_number 
+                        ? `<a href="tel:${place.formatted_phone_number}" class="btn btn-sm btn-outline-secondary flex-fill"><i class="fas fa-phone"></i> Ligar</a>` 
+                        : '';
+                    const actionButton = `<button class="btn btn-sm btn-primary flex-fill me-1" onclick="alert('Este estabelecimento não está registado na nossa plataforma. Utilize o contacto telefónico para agendar.')"><i class="fas fa-calendar-alt"></i> Agendar</button>`;
+
+                    const content = `
+                        <div class="p-2 text-start" style="width: 260px;">
+                            ${imageHtml}
+                            <h6 class="mb-1 fw-bold text-primary-custom">${place.name}</h6>
+                            <p class="small text-muted mb-2" style="font-size: 0.75rem; line-height: 1.3;">${address}</p>
+                            ${ratingHtml}
+                            <div class="d-flex mb-2">
+                                ${actionButton}
+                                ${phoneButton}
+                            </div>
+                            <div class="small fw-bold mt-2 text-secondary"><i class="fab fa-google text-danger"></i> Comentários do Google Maps:</div>
+                            ${reviewsHtml}
+                        </div>
+                    `;
+
+                    infowindow.setContent(content);
+                    infowindow.setPosition(latLng);
+                    infowindow.open(map);
+                    // also populate persistent side panel with same details
+                    const panel = document.getElementById('placeDetails');
+                    if (panel) panel.innerHTML = content.replace(/style="width: 260px;"/, ''); panel.style.display = 'block';
+                }
+            });
+        }
+
+        function renderPlaceDetailsPanel(place) {
+            const panel = document.getElementById('placeDetails');
+            if (!panel) return;
+            // build a simple card similar to infoWindow but persistent
+            const html = `
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h6 class="mb-1 fw-bold">${place.name}</h6>
+                        <p class="small text-muted mb-2">${place.address || ''}</p>
+                        <div class="mb-2">${(typeof place.rating === 'number' && place.rating>0) ? `<span class=\"badge bg-warning text-dark\">${place.rating.toFixed(1)} <i class=\"fas fa-star\"></i></span>` : ''}</div>
+                        <div class="d-grid gap-2">
+                            <a href="/Barbershops/Details/${place.id}" class="btn btn-primary btn-sm">Ver Detalhes</a>
+                            ${place.phone ? `<a href=\"tel:${place.phone}\" class=\"btn btn-outline-secondary btn-sm\">Ligar</a>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            panel.innerHTML = html;
+            panel.style.display = 'block';
         }
 
         function updateSidebar() {
             const listContainer = document.getElementById('locationsList');
             listContainer.innerHTML = '';
-            
+
             const bounds = map.getBounds();
+            if (!bounds) {
+                listContainer.innerHTML = '<div class="text-center text-muted small mt-4">Nenhum resultado visível nesta área</div>';
+                return;
+            }
+
             let visibleCount = 0;
+            // show up to 25 from serverMarkers
+            serverMarkers.forEach(entry => {
+                const marker = entry.marker;
+                const data = entry.data;
+                if (!marker || !marker.getPosition) return;
+                if (bounds.contains(marker.getPosition())) {
+                    visibleCount++;
+                    if (visibleCount > 25) return;
 
-            const allResults = [...dbMarkers, ...markers];
-            
-            allResults.forEach(item => {
-                if (bounds && bounds.contains(item.marker.getPosition())) {
-                    const isGoogleFilter = document.getElementById('checkAll').checked || (item.data.isGoogle && (document.getElementById('filterBarber').checked || document.getElementById('filterSalon').checked));
-                    const isDbFilter = document.getElementById('checkAll').checked || (!item.data.isGoogle && document.getElementById('filterPartner').checked);
-                    
-                    if (isGoogleFilter || isDbFilter) {
-                        visibleCount++;
-                        if (visibleCount > 25) return;
+                    const placeName = data.name || marker.getTitle();
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'card mb-2 shadow-sm border-0';
+                    itemDiv.style.cursor = 'pointer';
 
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'card mb-2 shadow-sm border-0';
-                        itemDiv.style.cursor = 'pointer';
-                        
-                        const badgeClass = item.data.isGoogle ? 'bg-primary' : 'bg-dark';
-                        const sourceName = item.data.isGoogle ? 'Google' : 'Parceiro';
+                    const ratingHtml = (typeof data.rating === 'number' && data.rating > 0) ? `<div class="text-warning small">${'★'.repeat(Math.round(data.rating))}</div>` : '';
 
-                        itemDiv.innerHTML = `
-                            <div class="card-body p-2">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <h6 class="mb-0 small fw-bold">${item.data.name}</h6>
-                                    <span class="badge ${badgeClass}" style="font-size: 0.6rem;">${sourceName}</span>
-                                </div>
-                                <p class="mb-0 text-muted" style="font-size: 0.75rem;">${item.data.address || "Endereço indisponível"}</p>
+                    itemDiv.innerHTML = `
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <h6 class="mb-0 small fw-bold">${placeName}</h6>
+                                <span class="badge bg-secondary" style="font-size: 0.6rem;">Recomendado</span>
                             </div>
-                        `;
-                        
-                        itemDiv.onclick = () => {
-                            map.panTo(item.marker.getPosition());
-                            google.maps.event.trigger(item.marker, 'click');
-                        };
-                        
-                        listContainer.appendChild(itemDiv);
-                    }
+                            <p class="mb-0 text-muted" style="font-size: 0.75rem;">${data.address || ''}</p>
+                            ${ratingHtml}
+                            ${data.hasMobile ? `<div class="mt-2 small text-success">Atendimento em casa disponível - Est. ${data.distanceKm ? data.distanceKm + ' km' : ''} ${data.estimatedTravelFee ? '- Taxa: €' + data.estimatedTravelFee : ''}</div>` : ''}
+                            <div class="mt-2">
+                                <a href="/Bookings/Create?barbershopId=${data.id}${userMarker && userMarker.getPosition ? '&userLat=' + userMarker.getPosition().lat() + '&userLng=' + userMarker.getPosition().lng() : ''}" class="btn btn-sm btn-outline-primary me-2">Solicitar On-site</a>
+                                ${data.phone ? `<a href="tel:${data.phone}" class="btn btn-sm btn-outline-secondary">Ligar</a>` : ''}
+                            </div>
+                        </div>
+                    `;
+
+                    itemDiv.onclick = () => {
+                        map.panTo(marker.getPosition());
+                        google.maps.event.trigger(marker, 'click');
+                    };
+
+                    listContainer.appendChild(itemDiv);
                 }
             });
 
@@ -303,37 +676,167 @@
         function setupUIListeners() {
             const checkAll = document.getElementById('checkAll');
             const filters = document.querySelectorAll('.category-filter');
+            const mobileOnly = document.getElementById('mobileOnly');
+            const genderSelect = document.getElementById('genderSelect');
+
+            const locateBtn = document.getElementById('locateBtn');
+            if (locateBtn) {
+                locateBtn.addEventListener('click', () => {
+                    locateUser();
+                });
+            }
 
             checkAll.addEventListener('change', function() {
                 filters.forEach(cb => cb.checked = this.checked);
-                updateFilters();
+                searchPlacesInBounds();
             });
+
+            if (mobileOnly) mobileOnly.addEventListener('change', () => searchPlacesInBounds());
+            if (genderSelect) genderSelect.addEventListener('change', () => searchPlacesInBounds());
 
             filters.forEach(cb => {
                 cb.addEventListener('change', () => {
                     checkAll.checked = Array.from(filters).every(f => f.checked);
-                    updateFilters();
+                    searchPlacesInBounds();
                 });
             });
+
+            // helper used by searchPlacesInBounds
+            window.getSelectedGenders = function() {
+                const sel = document.getElementById('genderSelect');
+                return sel && sel.value ? sel.value : '';
+            }
         }
 
-        function updateFilters() {
-            const filterBarber = document.getElementById('filterBarber').checked;
-            const filterSalon = document.getElementById('filterSalon').checked;
-            const filterPartner = document.getElementById('filterPartner').checked;
-            const checkAll = document.getElementById('checkAll').checked;
+        function updateUserMarker(latLng, accuracy, heading) {
+            // If heading is provided, show an arrow; otherwise a blue circle
+            if (typeof heading === 'number' && !isNaN(heading)) {
+                const arrowSymbol = {
+                    path: 'M0,-10 L6,6 L0,2 L-6,6 Z',
+                    scale: 1.8,
+                    fillColor: '#4285F4',
+                    fillOpacity: 1,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 1,
+                    rotation: heading
+                };
 
-            // Simple logic for this implementation:
-            // Partners: black dots
-            dbMarkers.forEach(m => m.marker.setMap((checkAll || filterPartner) ? map : null));
-            
-            // Google Results: blue dots (barber/salon)
-            markers.forEach(m => m.marker.setMap((checkAll || filterBarber || filterSalon) ? map : null));
-            
-            updateSidebar();
+                if (!userMarker) {
+                    userMarker = new google.maps.Marker({
+                        position: latLng,
+                        map: map,
+                        title: 'Você está aqui',
+                        icon: arrowSymbol
+                    });
+                } else {
+                    userMarker.setPosition(latLng);
+                    userMarker.setIcon(arrowSymbol);
+                    userMarker.setMap(map);
+                }
+            } else {
+                const circleSymbol = {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 9,
+                    fillColor: '#1A73E8',
+                    fillOpacity: 1,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 3
+                };
+
+                if (!userMarker) {
+                    userMarker = new google.maps.Marker({
+                        position: latLng,
+                        map: map,
+                        title: 'Você está aqui',
+                        icon: circleSymbol
+                    });
+                } else {
+                    userMarker.setPosition(latLng);
+                    userMarker.setIcon(circleSymbol);
+                    userMarker.setMap(map);
+                }
+            }
+
+            if (!accuracyCircle) {
+                accuracyCircle = new google.maps.Circle({
+                    strokeColor: '#4285F4',
+                    strokeOpacity: 0.3,
+                    strokeWeight: 1,
+                    fillColor: '#4285F4',
+                    fillOpacity: 0.12,
+                    map: map,
+                    center: latLng,
+                    radius: accuracy || 0
+                });
+            } else {
+                accuracyCircle.setCenter(latLng);
+                accuracyCircle.setRadius(accuracy || 0);
+                accuracyCircle.setMap(map);
+            }
         }
 
-        // Load visual representation of map
+        function locateUser() {
+            if (!navigator.geolocation) {
+                // silently ignore if not supported
+                return;
+            }
+
+            const loading = document.getElementById('mapLoading');
+            loading.style.display = 'block';
+
+            // clear previous watch if any
+            if (geoWatchId !== null) {
+                navigator.geolocation.clearWatch(geoWatchId);
+                geoWatchId = null;
+            }
+
+            // Try to get current position first
+            navigator.geolocation.getCurrentPosition((pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                const accuracy = pos.coords.accuracy || 0;
+                const heading = (typeof pos.coords.heading === 'number') ? pos.coords.heading : null;
+                const latLng = new google.maps.LatLng(lat, lng);
+
+                updateUserMarker(latLng, accuracy, heading);
+                map.panTo(latLng);
+                map.setZoom(Math.max(map.getZoom(), 14));
+                searchPlacesInBounds();
+                loading.style.display = 'none';
+
+                // Start watching for updates (heading/position)
+                geoWatchId = navigator.geolocation.watchPosition((p) => {
+                    const l = p.coords.latitude;
+                    const ln = p.coords.longitude;
+                    const a = p.coords.accuracy || 0;
+                    const h = (typeof p.coords.heading === 'number') ? p.coords.heading : null;
+                    const ll = new google.maps.LatLng(l, ln);
+                    updateUserMarker(ll, a, h);
+                }, (err) => {
+                    // ignore watch errors
+                }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+
+            }, (err) => {
+                loading.style.display = 'none';
+                // do not spam alerts on auto-locate; only show on manual click
+                if (document.activeElement && document.activeElement.id === 'locateBtn') {
+                    switch (err.code) {
+                        case err.PERMISSION_DENIED:
+                            alert('Permissão de geolocalização negada.');
+                            break;
+                        case err.POSITION_UNAVAILABLE:
+                            alert('Posição indisponível.');
+                            break;
+                        case err.TIMEOUT:
+                            alert('Tempo de geolocalização esgotado.');
+                            break;
+                        default:
+                            alert('Erro ao obter localização.');
+                    }
+                }
+            }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+        }
+
         window.onload = initMap;
     </script>
 }

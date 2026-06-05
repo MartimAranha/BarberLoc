@@ -13,6 +13,7 @@ namespace WebApplication1
 
             // Add services to the container.
             builder.Services.AddControllersWithViews();
+            builder.Services.AddMemoryCache();
             
             // Add DbContext with SQL Server
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -29,6 +30,14 @@ namespace WebApplication1
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>();
+
+            // Add external authentication (Google)
+            builder.Services.AddAuthentication()
+                .AddGoogle(options => {
+                    // configure via appsettings
+                    options.ClientId = builder.Configuration["Authentication:Google:ClientId"];
+                    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+                });
 
             var app = builder.Build();
             

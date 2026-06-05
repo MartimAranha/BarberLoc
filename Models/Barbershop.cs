@@ -29,6 +29,9 @@ namespace WebApplication1.Models
         public string? OpeningHours { get; set; }
         
         public string? ImageUrl { get; set; }
+
+        // Optional Google Place ID when available (for reviews and direct map links)
+        public string? PlaceId { get; set; }
         
         public double AverageRating { get; set; } = 0;
         
@@ -51,6 +54,13 @@ namespace WebApplication1.Models
         [Display(Name = "Cabeleireiro")]
         HairSalon,
         [Display(Name = "Unisexo")]
+        Unisex
+    }
+
+    public enum TargetGender
+    {
+        Male,
+        Female,
         Unisex
     }
 }

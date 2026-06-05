@@ -1,0 +1,9 @@
+# Pasta temporária do Visual Studio
+.vs/
+
+# Ficheiros compilados
+bin/
+obj/
+
+# Bibliotecas (opcional, mas recomendado)
+wwwroot/lib/

@@ -19,14 +19,23 @@ namespace WebApplication1.Controllers
 
         public async Task<IActionResult> Index()
         {
-            var topBarbershops = await _context.Barbershops
-                .Include(b => b.Reviews)
-                .Where(b => b.IsActive)
-                .OrderByDescending(b => b.AverageRating)
-                .Take(6)
-                .ToListAsync();
-                
-            return View(topBarbershops);
+            try
+            {
+                var topBarbershops = await _context.Barbershops
+                    .Include(b => b.Reviews)
+                    .Where(b => b.IsActive)
+                    .OrderByDescending(b => b.AverageRating)
+                    .Take(6)
+                    .ToListAsync();
+
+                return View(topBarbershops);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading top barbershops");
+                TempData["Error"] = "Ocorreu um erro ao carregar as barbearias em destaque.";
+                return View(new List<Barbershop>());
+            }
         }
 
         public IActionResult Privacy()

@@ -1,0 +1,79 @@
+@page
+@model WebApplication1.Areas.Identity.Pages.Account.RegisterModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "Registar";
+    Layout = "/Views/Shared/_Layout.cshtml";
+}
+
+<div class="auth-page">
+    <div class="hero-section">
+    <div class="container">
+        <h1 class="mb-2">Junte-se ao BarberLoc</h1>
+        <p class="lead">Registe-se para reservar os melhores cortes da sua área</p>
+    </div>
+    </div>
+
+<div class="container py-5" style="margin-top: -60px;">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h4 class="card-title mb-3 text-center">Criar Conta</h4>
+                    <p class="text-center text-muted small">Junte-se ao BarberLoc — rápido e fácil</p>
+
+                    <form method="post" asp-area="Identity" asp-page="/Account/Register">
+                        <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Nome completo</label>
+                            <input asp-for="Input.FullName" class="form-control form-control-lg" />
+                            <span asp-validation-for="Input.FullName" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input asp-for="Input.Email" class="form-control form-control-lg" placeholder="seu@exemplo.com" />
+                            <span asp-validation-for="Input.Email" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Número de Telefone</label>
+                            <input asp-for="Input.PhoneNumber" class="form-control form-control-lg" placeholder="+351 9XX XXX XXX" />
+                            <span asp-validation-for="Input.PhoneNumber" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Senha</label>
+                            <input asp-for="Input.Password" class="form-control form-control-lg" />
+                            <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Confirmar senha</label>
+                            <input asp-for="Input.ConfirmPassword" class="form-control form-control-lg" />
+                            <span asp-validation-for="Input.ConfirmPassword" class="text-danger small"></span>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mb-3">Criar conta</button>
+                    </form>
+
+                    <div class="text-center my-2 small text-muted">ou</div>
+
+                    <form asp-area="Identity" asp-page="/Account/ExternalLogin" method="post" class="d-grid gap-2">
+                        <input type="hidden" name="provider" value="Google" />
+                        <input type="hidden" name="returnUrl" value="/" />
+                        <button type="submit" class="btn btn-google-login">
+                            <i class="fab fa-google text-danger me-2"></i> Continuar com Google
+                        </button>
+                    </form>
+
+                    <div class="mt-4 text-center small">
+                        Já tem conta? <a asp-area="Identity" asp-page="/Account/Login">Entrar</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>

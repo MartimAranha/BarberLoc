@@ -27,6 +27,11 @@ namespace WebApplication1.Models
         public string? Notes { get; set; }
         
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+        // On-site booking fields
+        public bool IsOnSite { get; set; } = false;
+        public double? TravelDistanceKm { get; set; }
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? TravelFee { get; set; }
         
         // Navigation properties
         [ForeignKey("UserId")]

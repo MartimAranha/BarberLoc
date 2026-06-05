@@ -1,4 +1,4 @@
-/* BarberLoc - Modern Premium Styling */
+    /* BarberLoc - Modern Premium Styling */
 
 :root {
     --primary-color: #2c3e50;
@@ -90,6 +90,102 @@ body {
     text-align: center;
     position: relative;
     overflow: hidden;
+}
+
+/* Light hero variant for auth pages */
+.hero-section.auth-hero {
+    background: linear-gradient(135deg, var(--dark-bg) 0%, var(--primary-color) 100%);
+    padding: 80px 0;
+}
+
+/* Unified theme for auth pages (login/register/etc) */
+.auth-page {
+    --auth-hero-bg: linear-gradient(135deg, var(--dark-bg) 0%, var(--primary-color) 100%);
+}
+
+.auth-page .hero-section {
+    background: var(--auth-hero-bg);
+}
+
+.auth-page .card {
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(26, 26, 46, 0.15);
+    overflow: visible;
+}
+
+.auth-page .form-control {
+    border-radius: 10px;
+    border: 2px solid #e0e0e0;
+    padding: 14px 16px;
+}
+
+.auth-page .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(44, 62, 80, 0.15);
+}
+
+.auth-page .btn-primary {
+    background: linear-gradient(135deg, var(--secondary-color) 0%, #c0392b 100%) !important;
+    border: none !important;
+    color: white !important;
+}
+
+.auth-page .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+}
+
+.auth-page .btn-google-login {
+    border: 1px solid #ced4da !important;
+    background-color: #ffffff !important;
+    color: #333333 !important;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.auth-page .btn-google-login:hover {
+    background-color: #f8f9fa !important;
+    border-color: #adb5bd !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    transform: translateY(-1px);
+}
+
+.auth-page .card-body {
+    background: white;
+    border-radius: 16px;
+}
+
+/* Strong overrides to make auth pages match site theme even with Bootstrap defaults */
+.auth-page .card {
+    background: #ffffff !important;
+    border: none !important;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.auth-page .card .card-body {
+    padding: 2.5rem !important;
+}
+
+.auth-page .hero-section {
+    padding: 80px 0 !important;
+    border-bottom-left-radius: 40px;
+    border-bottom-right-radius: 40px;
+}
+
+.auth-page .lead {
+    color: rgba(255,255,255,0.95) !important;
+}
+
+.auth-page .navbar {
+    background: linear-gradient(135deg, var(--dark-bg) 0%, var(--primary-color) 100%) !important;
+}
+
+.auth-page .form-control {
+    background: #fbfbfd !important;
 }
 
 .hero-section::before {

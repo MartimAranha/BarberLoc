@@ -288,6 +288,9 @@ namespace WebApplication1.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PlaceId")
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
 
                     b.ToTable("Barbershops");
@@ -313,6 +316,9 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsOnSite")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -322,6 +328,12 @@ namespace WebApplication1.Migrations
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
+
+                    b.Property<double?>("TravelDistanceKm")
+                        .HasColumnType("float");
+
+                    b.Property<decimal?>("TravelFee")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -396,6 +408,9 @@ namespace WebApplication1.Migrations
                     b.Property<bool>("IsHomeService")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsMobile")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -403,6 +418,9 @@ namespace WebApplication1.Migrations
 
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TargetGender")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
