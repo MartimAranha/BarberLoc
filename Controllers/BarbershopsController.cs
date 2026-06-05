@@ -89,6 +89,8 @@ namespace WebApplication1.Controllers
         // GET: Barbershops/Map
         public IActionResult Map()
         {
+            // Provide Google Maps API key from configuration to the view (kept out of source files)
+            ViewData["GoogleApiKey"] = _config["Google:ApiKey"] ?? string.Empty;
             return View();
         }
 

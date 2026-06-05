@@ -91,7 +91,10 @@
 
 @section Scripts {
     <!-- Google Maps API Key inserted; ensure Places API is enabled and billing is configured in the Google Cloud Console -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCJoTK0cIqbOH8H1P_Z_cYHaMs44FcM6e8&libraries=places,geometry&language=pt"></script>
+    @{
+        var gkey = ViewData["GoogleApiKey"] as string ?? "";
+    }
+    <script src="https://maps.googleapis.com/maps/api/js?key=@gkey&libraries=places,geometry&language=pt"></script>
 
     <script>
         // Ensure geometry library is loaded for computeDistanceBetween usage
@@ -111,6 +114,8 @@
         let userMarker = null;
         let accuracyCircle = null;
         let geoWatchId = null;
+// whether the user manually interacted with the map (pan/zoom)
+let hasUserInteracted = false;
 
         function initMap() {
             const portugal = { lat: 41.3, lng: -6.7 };
@@ -122,6 +127,24 @@
                 fullscreenControl: true,
                 zoomControl: true
             });
+
+            // Hide default Google Maps POI/business icons (prevents the red place pins)
+            // This preserves roads/labels but removes the default red dots for businesses/POIs.
+            try {
+                map.setOptions({
+                    styles: [
+                        { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.business', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] }
+                    ]
+                });
+            } catch (e) {
+                console.warn('Failed to apply map styles to hide POI icons', e);
+            }
+
+            // mark when the user manually drags or changes zoom so we don't auto-recenter
+            map.addListener('dragstart', () => { hasUserInteracted = true; });
+            map.addListener('zoom_changed', () => { hasUserInteracted = true; });
 
             infowindow = new google.maps.InfoWindow();
             placesService = new google.maps.places.PlacesService(map);
@@ -286,13 +309,16 @@
                 }
 
                 // Only fit bounds if we have more than one result and user marker isn't present
+                // Do not auto-fit if the user manually interacted with the map (pan/zoom)
                 if (!bounds.isEmpty()) {
                     try {
-                        if (places.length > 1 && !(userMarker && userMarker.getPosition())) {
-                            map.fitBounds(bounds);
-                        } else if (places.length > 1 && userMarker && userMarker.getPosition()) {
-                            // extend but don't change zoom/center dramatically
-                            // keep current center/zoom
+                        if (places.length > 1 && !hasUserInteracted) {
+                            if (!(userMarker && userMarker.getPosition())) {
+                                map.fitBounds(bounds);
+                            } else {
+                                // extend but don't change zoom/center dramatically
+                                // keep current center/zoom
+                            }
                         }
                     } catch (e) {
                         console.warn(e);
@@ -682,6 +708,8 @@
             const locateBtn = document.getElementById('locateBtn');
             if (locateBtn) {
                 locateBtn.addEventListener('click', () => {
+                    // user explicitly requested to center on their location
+                    hasUserInteracted = false;
                     locateUser();
                 });
             }

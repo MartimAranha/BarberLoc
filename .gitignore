@@ -7,3 +7,16 @@ obj/
 
 # Bibliotecas (opcional, mas recomendado)
 wwwroot/lib/
+
+# Configurações locais de desenvolvimento (não comitar)
+appsettings.Development.json
+
+# Ficheiros específicos do utilizador
+*.user
+*.suo
+
+# Rider
+.idea/
+
+# Logs
+*.log
