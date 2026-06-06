@@ -1028,7 +1028,6 @@ C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\staticwebassets.build.json.
 C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\staticwebassets.development.json
 C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\staticwebassets.build.endpoints.json
 C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\swae.build.ex.cache
-C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\WebAppli.7D14BD69.Up2Date
 C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\WebApplication1.dll
 C:\Users\Martim\Documents\BarberLoc\obj\Debug\net8.0\refint\WebApplication1.dll
