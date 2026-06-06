@@ -1,4 +1,6 @@
+using System;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
 using Microsoft.Extensions.Caching.Memory;
@@ -89,8 +91,17 @@ namespace WebApplication1.Controllers
         // GET: Barbershops/Map
         public IActionResult Map()
         {
-            // Provide Google Maps API key from configuration to the view (kept out of source files)
-            ViewData["GoogleApiKey"] = _config["Google:ApiKey"] ?? string.Empty;
+            // Provide Google Maps API key from environment variable (for quick testing) or configuration
+            // WARNING: This is a temporary testing hook. Do not commit hardcoded secrets.
+            var testKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY_TEST");
+            if (!string.IsNullOrWhiteSpace(testKey))
+            {
+                ViewData["GoogleApiKey"] = testKey;
+            }
+            else
+            {
+                ViewData["GoogleApiKey"] = _config["Google:ApiKey"] ?? string.Empty;
+            }
             return View();
         }
 
