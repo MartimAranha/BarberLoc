@@ -37,8 +37,7 @@ namespace WebApplication1.Areas.Identity.Pages.Account
             public string Email { get; set; } = string.Empty;
 
             [Phone]
-            [Display(Name = "Número de Telefone")]
-            public string? PhoneNumber { get; set; }
+            // Phone number removed from registration form (not required)
 
             [Required]
             [DataType(DataType.Password)]
@@ -65,10 +64,7 @@ namespace WebApplication1.Areas.Identity.Pages.Account
                 {
                     _logger.LogInformation("User created a new account with password.");
 
-                    if (!string.IsNullOrEmpty(Input.PhoneNumber))
-                    {
-                        await _userManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
-                    }
+                    // phone number not collected at registration; can be added later in profile
 
                     await _signInManager.SignInAsync(user, isPersistent: false);
                     return LocalRedirect(returnUrl);

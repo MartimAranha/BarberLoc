@@ -54,8 +54,9 @@ namespace WebApplication1
                     
                     var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
                     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-                    
-                    await DbSeeder.SeedAsync(context, userManager, roleManager);
+                    var config = services.GetRequiredService<IConfiguration>();
+
+                    await DbSeeder.SeedAsync(config, context, userManager, roleManager);
                 }
                 catch (Exception ex)
                 {
