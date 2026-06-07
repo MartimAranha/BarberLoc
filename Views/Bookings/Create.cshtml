@@ -1,194 +1,298 @@
-@model WebApplication1.Models.Booking
+@model WebApplication1.Models.ViewModels.AppointmentCreateViewModel
 
 @{
     ViewData["Title"] = "Criar Reserva";
-    var barbershop = ViewBag.Barbershop as WebApplication1.Models.Barbershop;
-    var services = ViewBag.Services as List<WebApplication1.Models.Service>;
+    var barbershop = Model.Barbershop;
+    var mobileServices = Model.AvailableServices.Where(s => s.IsMobile).ToList();
 }
 
 <div class="container my-5">
     <div class="row mb-3">
         <div class="col-12">
-            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop?.Id" class="btn btn-outline-primary">
-                <i class="fas fa-arrow-left"></i> Voltar
+            <a asp-controller="Provider" asp-action="Details" asp-route-id="@barbershop?.Id" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> Voltar ao perfil
             </a>
         </div>
     </div>
 
     <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow-custom">
-                <div class="card-body p-4">
-                    <h2 class="card-title mb-4 text-center">
-                        <i class="fas fa-calendar-plus text-accent"></i> Criar Reserva
-                    </h2>
+        <div class="col-lg-7">
 
-                    @if (barbershop != null)
-                    {
-                        <div class="alert alert-info">
-                            <h5><i class="fas fa-store"></i> @barbershop.Name</h5>
-                            <p class="mb-0"><i class="fas fa-map-marker-alt"></i> @barbershop.Address</p>
-                            @if (!string.IsNullOrEmpty(barbershop.PhoneNumber))
-                            {
-                                <p class="mb-0 mt-1">
-                                    <i class="fas fa-phone"></i>
-                                    <a href="tel:@barbershop.PhoneNumber" class="text-dark fw-bold">@barbershop.PhoneNumber</a>
-                                </p>
-                            }
-                        </div>
-                    }
-
-                    <form asp-action="Create" method="post" id="bookingForm">
-                        @Html.HiddenFor(model => model.BarbershopId)
-                        <input type="hidden" id="userLat" name="userLat" />
-                        <input type="hidden" id="userLng" name="userLng" />
-                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-
-                        <div class="mb-3">
-                            <label asp-for="ServiceId" class="form-label">
-                                <i class="fas fa-scissors"></i> Serviço (Opcional)
-                            </label>
-                            <select asp-for="ServiceId" class="form-select">
-                                <option value="">-- Selecione um serviço (opcional) --</option>
-                                @if (services != null)
-                                {
-                                    @foreach (var service in services)
+            @* ── Barbershop Summary Card ── *@
+            @if (barbershop != null)
+            {
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                    <div class="booking-shop-banner" @(!string.IsNullOrEmpty(barbershop.ImageUrl) ? $"style=\"background-image:url('{barbershop.ImageUrl}')\"" : "")>
+                        <div class="booking-shop-banner__overlay p-4">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="booking-shop-icon">
+                                    <i class="fas fa-store fa-lg"></i>
+                                </div>
+                                <div>
+                                    <h2 class="h5 text-white fw-bold mb-1">@barbershop.Name</h2>
+                                    <p class="text-white opacity-75 small mb-0">
+                                        <i class="fas fa-map-marker-alt me-1"></i>@barbershop.Address
+                                    </p>
+                                    @if (!string.IsNullOrEmpty(barbershop.PhoneNumber))
                                     {
-                                        <option value="@service.Id">
-                                            @service.Name - €@service.Price.ToString("0.00") (@service.DurationMinutes min)
-                                        </option>
+                                        <a href="tel:@barbershop.PhoneNumber" class="text-white opacity-75 small text-decoration-none">
+                                            <i class="fas fa-phone me-1"></i>@barbershop.PhoneNumber
+                                        </a>
                                     }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @* ── Booking Form ── *@
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4 p-md-5">
+                    <h1 class="h4 fw-bold text-center mb-4">
+                        <i class="fas fa-calendar-plus text-primary me-2"></i>Nova Reserva
+                    </h1>
+
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger border-0 rounded-3"></div>
+
+                    <form asp-action="Create" method="post" id="bookingForm" novalidate>
+                        <input asp-for="BarbershopId" type="hidden" />
+                        <input asp-for="UserLat" type="hidden" id="userLat" />
+                        <input asp-for="UserLng" type="hidden" id="userLng" />
+
+                        @* ── Service Selection ── *@
+                        <div class="mb-4">
+                            <label asp-for="ServiceId" class="form-label fw-semibold">
+                                <i class="fas fa-scissors text-primary me-1"></i> Serviço
+                            </label>
+                            <select asp-for="ServiceId" class="form-select form-select-lg rounded-3" id="serviceSelect">
+                                <option value="">— Selecione um serviço (opcional) —</option>
+                                @foreach (var service in Model.AvailableServices)
+                                {
+                                    <option value="@service.Id"
+                                            data-price="@service.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                            data-duration="@service.DurationMinutes"
+                                            data-mobile="@service.IsMobile.ToString().ToLower()">
+                                        @service.Name — €@service.Price.ToString("0.00") (@service.DurationMinutes min)
+                                        @(service.IsMobile ? "🏠" : "")
+                                    </option>
                                 }
                             </select>
-                            <span asp-validation-for="ServiceId" class="text-danger"></span>
+                            <span asp-validation-for="ServiceId" class="text-danger small"></span>
+                            <div id="serviceInfo" class="alert alert-info border-0 small mt-2 d-none"></div>
                         </div>
 
-                        <div class="mb-3">
-                            <label asp-for="BookingDate" class="form-label">
-                                <i class="fas fa-calendar"></i> Data da Reserva*
-                            </label>
-                            <input asp-for="BookingDate" type="date" class="form-control" 
-                                   min="@DateTime.Now.ToString("yyyy-MM-dd")" />
-                            <span asp-validation-for="BookingDate" class="text-danger"></span>
+                        @* ── Date & Time ── *@
+                        <div class="row g-3 mb-4">
+                            <div class="col-sm-6">
+                                <label asp-for="BookingDate" class="form-label fw-semibold">
+                                    <i class="fas fa-calendar text-primary me-1"></i> Data*
+                                </label>
+                                <input asp-for="BookingDate" type="date" class="form-control form-control-lg rounded-3"
+                                       min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" />
+                                <span asp-validation-for="BookingDate" class="text-danger small"></span>
+                            </div>
+                            <div class="col-sm-6">
+                                <label asp-for="BookingTime" class="form-label fw-semibold">
+                                    <i class="fas fa-clock text-primary me-1"></i> Hora*
+                                </label>
+                                <input asp-for="BookingTime" type="time" class="form-control form-control-lg rounded-3" />
+                                <span asp-validation-for="BookingTime" class="text-danger small"></span>
+                                @if (!string.IsNullOrEmpty(barbershop?.OpeningHours))
+                                {
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>@barbershop.OpeningHours
+                                    </small>
+                                }
+                            </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label asp-for="BookingTime" class="form-label">
-                                <i class="fas fa-clock"></i> Hora da Reserva*
-                            </label>
-                            <input asp-for="BookingTime" type="time" class="form-control" />
-                            <span asp-validation-for="BookingTime" class="text-danger"></span>
-                            <small class="form-text text-muted">
-                                Horário de funcionamento: @(barbershop?.OpeningHours ?? "Consulte a barbearia")
-                            </small>
-                        </div>
-
+                        @* ── Notes ── *@
                         <div class="mb-4">
-                            <label asp-for="Notes" class="form-label">
-                                <i class="fas fa-sticky-note"></i> Notas Adicionais
+                            <label asp-for="Notes" class="form-label fw-semibold">
+                                <i class="fas fa-sticky-note text-primary me-1"></i> Notas Adicionais
                             </label>
-                            <textarea asp-for="Notes" class="form-control" rows="4" 
-                                      placeholder="Escreva aqui qualquer informação adicional (preferências, solicitações especiais, etc.)"></textarea>
-                            <span asp-validation-for="Notes" class="text-danger"></span>
+                            <textarea asp-for="Notes" class="form-control rounded-3" rows="3"
+                                      placeholder="Preferências, solicitações especiais, estilo de corte..."></textarea>
+                            <span asp-validation-for="Notes" class="text-danger small"></span>
                         </div>
 
-                        <div class="d-grid gap-2">
-                            <!-- Serviço ao Domicílio -->
+                        @* ── Home Service Toggle ── *@
+                        @if (Model.HasMobileServices)
+                        {
                             <div class="mb-4">
-                                <div class="card border-2 border-warning" id="onSiteCard">
-                                    <div class="card-body">
-                                        <div class="form-check form-switch d-flex align-items-center gap-3">
-                                            <input class="form-check-input" type="checkbox" role="switch" 
-                                                   asp-for="IsOnSite" id="isOnSiteToggle" name="IsOnSite" style="width:3em; height:1.5em;">
-                                            <div>
-                                                <label class="form-check-label fw-bold fs-6" for="isOnSiteToggle">
-                                                    <i class="fas fa-motorcycle text-warning me-2"></i> Serviço ao Domicílio
-                                                </label>
-                                                <div class="small text-muted">O profissional desloca-se até à tua morada</div>
-                                            </div>
+                                <div class="home-service-card p-4 rounded-4" id="onSiteCard">
+                                    <div class="d-flex align-items-center gap-3 mb-0">
+                                        <div class="home-service-icon">
+                                            <i class="fas fa-motorcycle fa-lg"></i>
                                         </div>
-
-                                        <div id="onSiteDetails" class="mt-3 d-none">
-                                            <div class="alert alert-warning mb-2">
-                                                <i class="fas fa-info-circle me-2"></i>
-                                                <span id="travelFeeEstimate">A calcular distância e taxa de deslocação...</span>
-                                            </div>
-                                            <div class="mb-2">
-                                                <label class="form-label small fw-semibold">A tua morada para o serviço</label>
-                                                <input type="text" class="form-control" id="onSiteAddress" 
-                                                       placeholder="Rua, número, cidade..." />
-                                            </div>
+                                        <div class="flex-fill">
+                                            <div class="fw-bold">Serviço ao Domicílio</div>
+                                            <div class="text-muted small">O profissional desloca-se até à sua morada</div>
+                                        </div>
+                                        <div class="form-check form-switch mb-0">
+                                            <input asp-for="IsOnSite" class="form-check-input"
+                                                   type="checkbox" role="switch" id="isOnSiteToggle"
+                                                   style="width:3em;height:1.5em;" />
+                                        </div>
+                                    </div>
+                                    <div id="onSiteDetails" class="mt-4 d-none">
+                                        <div class="alert alert-warning border-0 rounded-3 mb-3">
+                                            <i class="fas fa-route me-2"></i>
+                                            <span id="travelFeeEstimate">A calcular distância e taxa de deslocação...</span>
+                                        </div>
+                                        <div>
+                                            <label class="form-label fw-semibold small">A sua morada para o serviço</label>
+                                            <input type="text" class="form-control rounded-3" id="onSiteAddress"
+                                                   placeholder="Rua, número, cidade..." />
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        }
+                        else if (barbershop?.Services != null)
+                        {
+                            <div class="alert alert-light border rounded-3 small mb-4">
+                                <i class="fas fa-info-circle text-muted me-1"></i>
+                                Este estabelecimento não oferece serviço ao domicílio no momento.
+                            </div>
+                        }
 
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="fas fa-check"></i> Confirmar Reserva
+                        @* ── Submit ── *@
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg rounded-3 fw-bold" id="submitBtn">
+                                <i class="fas fa-check me-2"></i> Confirmar Reserva
                             </button>
-                            <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@barbershop?.Id" 
-                               class="btn btn-outline-secondary">
-                                <i class="fas fa-times"></i> Cancelar
+                            <a asp-controller="Provider" asp-action="Details" asp-route-id="@barbershop?.Id"
+                               class="btn btn-outline-secondary rounded-3">
+                                <i class="fas fa-times me-1"></i> Cancelar
                             </a>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <div class="alert alert-warning mt-4">
-                <i class="fas fa-info-circle"></i> 
-                <strong>Nota:</strong> A sua reserva ficará pendente até ser confirmada pela barbearia. 
-                Receberá uma notificação quando o estado da reserva for atualizado.
+            <div class="alert alert-light border mt-4 rounded-3 small">
+                <i class="fas fa-info-circle text-primary me-1"></i>
+                <strong>Nota:</strong> A sua reserva ficará pendente até ser confirmada pelo prestador.
             </div>
+
         </div>
     </div>
 </div>
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
-}
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const toggle = document.getElementById('isOnSiteToggle');
-        const details = document.getElementById('onSiteDetails');
-        const userLat = document.getElementById('userLat');
-        const userLng = document.getElementById('userLng');
+    <style>
+        .booking-shop-banner {
+            background: linear-gradient(135deg, #4361ee, #7209b7);
+            background-size: cover;
+            background-position: center;
+        }
+        .booking-shop-banner__overlay {
+            background: linear-gradient(135deg, rgba(67,97,238,0.85), rgba(114,9,183,0.85));
+        }
+        .booking-shop-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .home-service-card {
+            background: linear-gradient(135deg, #fff8e1, #fff3cd);
+            border: 2px solid #ffc107;
+        }
+        .home-service-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: #ffc107;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            flex-shrink: 0;
+        }
+    </style>
 
-        toggle.addEventListener('change', function () {
-            if (this.checked) {
-                details.classList.remove('d-none');
-                getLocation();
-            } else {
-                details.classList.add('d-none');
-                userLat.value = '';
-                userLng.value = '';
-            }
-        });
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const toggle = document.getElementById('isOnSiteToggle');
+            const details = document.getElementById('onSiteDetails');
+            const userLat = document.getElementById('userLat');
+            const userLng = document.getElementById('userLng');
+            const serviceSelect = document.getElementById('serviceSelect');
+            const serviceInfo = document.getElementById('serviceInfo');
 
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function (pos) {
-                    userLat.value = pos.coords.latitude;
-                    userLng.value = pos.coords.longitude;
-
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
-                    fetch(`/Bookings/EstimateFee?barbershopId=@Model.BarbershopId&userLat=${lat}&userLng=${lng}`)
-                        .then(r => r.json())
-                        .then(data => {
-                            document.getElementById('travelFeeEstimate').innerHTML =
-                                `<strong>Distância estimada:</strong> ${data.distanceKm} km — <strong>Taxa: €${data.fee}</strong>`;
-                        })
-                        .catch(() => {
-                            document.getElementById('travelFeeEstimate').textContent =
-                                'Taxa calculada no momento da confirmação (base €5 + €0.75/km)';
-                        });
-                }, function () {
-                    document.getElementById('travelFeeEstimate').textContent =
-                        'Não foi possível obter localização. Partilha a localização para ver a estimativa.';
+            // ── Service info tooltip ──
+            if (serviceSelect) {
+                serviceSelect.addEventListener('change', function () {
+                    const opt = this.options[this.selectedIndex];
+                    if (opt.value) {
+                        const price = opt.dataset.price;
+                        const duration = opt.dataset.duration;
+                        const isMobile = opt.dataset.mobile === 'true';
+                        serviceInfo.classList.remove('d-none');
+                        serviceInfo.innerHTML = `<i class="fas fa-clock me-1"></i> Duração: <strong>${duration} min</strong>
+                            &nbsp;·&nbsp; <i class="fas fa-euro-sign me-1"></i> Preço: <strong>€${parseFloat(price).toFixed(2)}</strong>
+                            ${isMobile ? '&nbsp;·&nbsp; <i class="fas fa-home text-warning me-1"></i><strong>Disponível ao domicílio</strong>' : ''}`;
+                    } else {
+                        serviceInfo.classList.add('d-none');
+                    }
                 });
             }
-        }
-    });
-</script>
+
+            // ── Home service toggle ──
+            if (toggle) {
+                toggle.addEventListener('change', function () {
+                    if (this.checked) {
+                        details.classList.remove('d-none');
+                        getLocation();
+                    } else {
+                        details.classList.add('d-none');
+                        userLat.value = '';
+                        userLng.value = '';
+                    }
+                });
+            }
+
+            function getLocation() {
+                if (!navigator.geolocation) {
+                    document.getElementById('travelFeeEstimate').textContent =
+                        'Geolocalização não suportada. A taxa será calculada manualmente.';
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        userLat.value = lat;
+                        userLng.value = lng;
+
+                        fetch(`/Bookings/EstimateFee?barbershopId=@Model.BarbershopId&userLat=${lat}&userLng=${lng}`)
+                            .then(r => r.json())
+                            .then(data => {
+                                document.getElementById('travelFeeEstimate').innerHTML =
+                                    `<strong>Distância estimada:</strong> ${data.distanceKm} km
+                                     &nbsp;—&nbsp; <strong>Taxa de deslocação: €${data.fee}</strong>`;
+                            })
+                            .catch(() => {
+                                document.getElementById('travelFeeEstimate').textContent =
+                                    'Taxa calculada no momento da confirmação (base €5 + €0.75/km).';
+                            });
+                    },
+                    function () {
+                        document.getElementById('travelFeeEstimate').textContent =
+                            'Não foi possível obter a localização. Partilhe a localização para ver a estimativa.';
+                    }
+                );
+            }
+        });
+    </script>
+}

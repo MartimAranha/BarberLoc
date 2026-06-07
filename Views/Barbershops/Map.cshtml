@@ -1,61 +1,206 @@
 @{
     ViewData["Title"] = "Mapa de Barbearias";
+    var googleApiKey = ViewData["GoogleApiKey"] as string ?? string.Empty;
 }
 
-<div class="container-fluid px-0">
-    <div class="row g-0">
-        <div class="col-md-3 p-3 bg-light border-end" style="height: calc(100vh - 56px); overflow-y: auto;">
-            <h4><i class="fas fa-map-marked-alt text-primary"></i> Explorar Mapa</h4>
-            <div id="locationsList" class="mt-4"></div>
-        </div>
+@* ── Anti-forgery token for authenticated AJAX posts ── *@
+@Html.AntiForgeryToken()
 
-        <div class="col-md-9 position-relative">
-            <div id="map" style="height: calc(100vh - 56px); width: 100%;"></div>
-            <div id="mapLoading" class="position-absolute top-50 start-50 translate-middle bg-white p-3 rounded shadow" style="display: none; z-index: 1000;">
-                <div class="spinner-border text-primary" role="status"></div> Pesquisando...
-            </div>
-        </div>
-    </div>
-</div>
+<meta name="description" content="Encontre barbearias e salões de beleza perto de si no mapa interativo BarberLoc. Veja avaliações Google, horários, contactos e muito mais." />
 
-@section Scripts {
-    @{
-        var gkey = ViewData["GoogleApiKey"] as string ?? "";
+<style>
+    #map-container {
+        position: relative;
+        height: calc(100vh - 56px);
+        overflow: hidden;
     }
 
+    #map {
+        height: 100%;
+        width: 100%;
+    }
+
+    /* Filter sidebar */
+    #filter-sidebar {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        width: 280px;
+        max-height: calc(100% - 24px);
+        overflow-y: auto;
+        border-radius: 1rem;
+        box-shadow: 0 4px 24px rgba(0,0,0,.18);
+        transition: transform 0.3s ease;
+    }
+
+    #filter-sidebar.collapsed-sidebar {
+        transform: translateX(-300px);
+    }
+
+    #toggle-sidebar-btn {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 11;
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,.2);
+        transition: left 0.3s ease;
+    }
+
+    #toggle-sidebar-btn.sidebar-open {
+        left: 304px;
+    }
+
+    /* Map loading overlay */
+    #map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 20;
+        border-radius: 1rem;
+    }
+
+    /* Custom marker badge */
+    .marker-label {
+        background: #fff;
+        border-radius: 1rem;
+        padding: 2px 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #343a40;
+        box-shadow: 0 2px 6px rgba(0,0,0,.2);
+    }
+
+    @@media (max-width: 767.98px) {
+        #filter-sidebar {
+            width: calc(100vw - 24px);
+            max-height: 45vh;
+            top: auto;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            transform: none;
+        }
+        #filter-sidebar.collapsed-sidebar {
+            transform: translateY(calc(100% + 20px));
+        }
+        #toggle-sidebar-btn {
+            top: auto;
+            bottom: 12px;
+            left: auto;
+            right: 12px;
+        }
+        #toggle-sidebar-btn.sidebar-open {
+            left: auto;
+            bottom: calc(45vh + 20px);
+        }
+    }
+</style>
+
+<div id="map-container">
+
+    @* Google Map *@
+    <div id="map"></div>
+
+    @* Map loading overlay *@
+    <div id="map-loading" class="bg-white shadow-lg p-4 text-center d-none">
+        <div class="spinner-border text-primary mb-2" role="status">
+            <span class="visually-hidden">A carregar mapa...</span>
+        </div>
+        <p class="mb-0 small text-muted">A carregar barbearias...</p>
+    </div>
+
+    @* No API key warning *@
+    @if (string.IsNullOrWhiteSpace(googleApiKey))
+    {
+        <div class="position-absolute top-0 start-0 end-0 m-3 z-index-1000" style="z-index:30;">
+            <div class="alert alert-warning alert-dismissible fade show shadow mb-0" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Chave de API em falta.</strong> Configure <code>Google:ApiKey</code> em <code>appsettings.json</code>.
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+    }
+
+    @* Toggle filter sidebar button *@
+    <button id="toggle-sidebar-btn" class="btn btn-light sidebar-open" title="Filtros" aria-label="Mostrar/Esconder filtros">
+        <i class="fas fa-filter me-1"></i> Filtros
+    </button>
+
+    @* Filter sidebar *@
+    <div id="filter-sidebar" class="bg-white p-3">
+        <h6 class="fw-bold mb-3">
+            <i class="fas fa-sliders-h text-primary me-2"></i>Filtrar Resultados
+        </h6>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Categoria</label>
+            <div class="d-flex flex-wrap gap-1">
+                <button class="btn btn-sm btn-outline-primary filter-btn active" data-filter="category" data-value="">Todos</button>
+                <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="category" data-value="Barbershop">Barbearia</button>
+                <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="category" data-value="HairSalon">Cabeleireiro</button>
+                <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="category" data-value="Unisex">Unisexo</button>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Avaliação Mínima</label>
+            <div class="d-flex flex-wrap gap-1">
+                <button class="btn btn-sm btn-outline-warning filter-btn active" data-filter="minRating" data-value="">Qualquer</button>
+                <button class="btn btn-sm btn-outline-warning filter-btn" data-filter="minRating" data-value="3">3+ <i class="fas fa-star"></i></button>
+                <button class="btn btn-sm btn-outline-warning filter-btn" data-filter="minRating" data-value="4">4+ <i class="fas fa-star"></i></button>
+                <button class="btn btn-sm btn-outline-warning filter-btn" data-filter="minRating" data-value="4.5">4.5+ <i class="fas fa-star"></i></button>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Serviços</label>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="filter-mobile" value="1">
+                <label class="form-check-label small" for="filter-mobile">
+                    <i class="fas fa-home text-info me-1"></i>Serviço ao Domicílio
+                </label>
+            </div>
+        </div>
+
+        <hr class="my-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted" id="results-count">A carregar...</small>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">
+                <i class="fas fa-undo me-1"></i>Limpar
+            </button>
+        </div>
+    </div>
+
+</div>
+
+@* Place detail offcanvas panel *@
+@await Html.PartialAsync("_PlaceDetailPanel")
+
+@section Scripts {
     <script>
-        // Esta função É OBRIGATÓRIA para o Google Maps
-        window.initMap = function() {
-            console.log("Google Maps carregado e initMap chamado!");
-            
-            const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 12,
-                center: { lat: 38.7223, lng: -9.1393 } // Lisboa
-            });
-
-            // Chama a função que vais ter no teu barbershops-map.js
-            if (typeof loadBarbershops === 'function') {
-                loadBarbershops(map);
-            } else {
-                console.error("A função loadBarbershops não foi encontrada no barbershops-map.js!");
-            }
+        // ── Config passed from server to JS (API key never used client-side for Places calls) ──
+        window.BarberLocConfig = {
+            isAuthenticated: @(User.Identity?.IsAuthenticated == true ? "true" : "false"),
+            antiForgeryToken: document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
         };
-
-        (function() {
-            var renderedKey = '@gkey';
-            if (!renderedKey || renderedKey.includes('YOUR_')) {
-                console.error('Chave de API inválida.');
-                return;
-            }
-
-            // Injeta o script do Google Maps com a callback=initMap
-            var script = document.createElement('script');
-            script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(renderedKey) + '&callback=initMap';
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
-        })();
     </script>
-    
-    <script src="~/js/barbershops-map.js"></script>
+
+    <script src="~/js/barbershops-map.js" asp-append-version="true"></script>
+
+    @if (!string.IsNullOrWhiteSpace(googleApiKey))
+    {
+        @* Google Maps JS API — loaded last, triggers initMap callback defined in barbershops-map.js *@
+        <script>
+            (function () {
+                var script = document.createElement('script');
+                script.src = 'https://maps.googleapis.com/maps/api/js?key=@googleApiKey&libraries=places,marker&callback=initMap&loading=async';
+                script.async = true;
+                script.defer = true;
+                document.head.appendChild(script);
+            })();
+        </script>
+    }
 }

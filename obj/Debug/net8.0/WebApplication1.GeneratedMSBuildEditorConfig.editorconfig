@@ -67,6 +67,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQmFyYmVyc2hvcHNcTWFwLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/Users/Martim/Documents/BarberLoc/Views/Barbershops/_PlaceDetailPanel.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQmFyYmVyc2hvcHNcX1BsYWNlRGV0YWlsUGFuZWwuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/Users/Martim/Documents/BarberLoc/Views/Bookings/Create.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQm9va2luZ3NcQ3JlYXRlLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
@@ -85,6 +89,14 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/Users/Martim/Documents/BarberLoc/Views/Profile/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJvZmlsZVxJbmRleC5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/Martim/Documents/BarberLoc/Views/Provider/Details.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJvdmlkZXJcRGV0YWlscy5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/Martim/Documents/BarberLoc/Views/Provider/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcUHJvdmlkZXJcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/Users/Martim/Documents/BarberLoc/Views/Reviews/Create.cshtml]

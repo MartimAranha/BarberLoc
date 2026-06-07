@@ -1,0 +1,216 @@
+@* ─── Place Detail Offcanvas Panel ──────────────────────────────────────────
+   This partial is included in Map.cshtml via @await Html.PartialAsync.
+   All dynamic fields are populated by barbershops-map.js via data-field attributes.
+   The panel is a Bootstrap 5 Offcanvas — responsive:
+     • md+  → offcanvas-end (right sidebar, 420px wide)
+     • xs/sm → offcanvas-bottom (bottom sheet, 80vh)
+   ─────────────────────────────────────────────────────────────────────────── *@
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="placeDetailPanel" aria-labelledby="placeDetailPanelLabel"
+     style="width: 420px; max-width: 100%;">
+
+    <div class="offcanvas-header border-bottom px-4 py-3">
+        <h5 class="offcanvas-title fw-bold" id="placeDetailPanelLabel">
+            <i class="fas fa-cut me-2 text-primary"></i>
+            <span data-field="name">Detalhes da Barbearia</span>
+        </h5>
+        <div class="d-flex align-items-center gap-2">
+            @* Favourite button — shown only when a place is loaded *@
+            <button type="button" id="btn-favourite" class="btn btn-sm btn-outline-danger d-none"
+                    title="Guardar nos Favoritos" aria-label="Favoritos">
+                <i class="far fa-heart" id="fav-icon"></i>
+            </button>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+        </div>
+    </div>
+
+    <div class="offcanvas-body px-0 pb-0" id="place-panel-body">
+
+        @* ── Loading spinner (shown while fetch is in progress) ── *@
+        <div id="panel-loading" class="d-flex flex-column align-items-center justify-content-center py-5 px-4">
+            <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">A carregar...</span>
+            </div>
+            <p class="text-muted">A carregar detalhes...</p>
+        </div>
+
+        @* ── Error state ── *@
+        <div id="panel-error" class="d-none px-4 py-4">
+            <div class="alert alert-warning d-flex align-items-center gap-2">
+                <i class="fas fa-exclamation-triangle fa-lg"></i>
+                <span>Não foi possível carregar os detalhes. Por favor tente mais tarde.</span>
+            </div>
+        </div>
+
+        @* ── Main content (hidden until fetch completes) ── *@
+        <div id="panel-content" class="d-none">
+
+            @* Photo Carousel *@
+            <div id="photo-carousel-wrapper" class="d-none">
+                <div id="placePhotoCarousel" class="carousel slide" data-bs-ride="carousel">
+                    <div class="carousel-inner" id="carousel-inner">
+                        @* Photos injected by JS *@
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#placePhotoCarousel" data-bs-slide="prev">
+                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">Anterior</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#placePhotoCarousel" data-bs-slide="next">
+                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">Seguinte</span>
+                    </button>
+                    <div class="carousel-indicators" id="carousel-indicators">
+                        @* Indicators injected by JS *@
+                    </div>
+                </div>
+            </div>
+
+            @* No-photo placeholder *@
+            <div id="photo-placeholder" class="d-none bg-dark d-flex align-items-center justify-content-center"
+                 style="height: 220px;">
+                <i class="fas fa-store fa-5x text-secondary opacity-50"></i>
+            </div>
+
+            @* Info Section *@
+            <div class="px-4 pt-4">
+
+                @* Mock data badge *@
+                <div id="mock-badge" class="d-none mb-2">
+                    <span class="badge bg-secondary">
+                        <i class="fas fa-flask me-1"></i> Dados de demonstração
+                    </span>
+                </div>
+
+                @* Name & Rating *@
+                <h4 class="fw-bold mb-1" data-field="name">—</h4>
+
+                <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+                    @* Star rating rendered by JS *@
+                    <div id="panel-stars" class="text-warning me-1"></div>
+                    <span class="fw-bold" data-field="rating">—</span>
+                    <span class="text-muted small" data-field="ratings-total"></span>
+                    @* Open/Closed badge *@
+                    <span id="open-badge" class="badge d-none"></span>
+                </div>
+
+                @* Address *@
+                <div class="mb-2 d-flex align-items-start gap-2">
+                    <i class="fas fa-map-marker-alt text-primary mt-1 flex-shrink-0"></i>
+                    <span class="text-muted small" data-field="address">—</span>
+                </div>
+
+                @* Phone *@
+                <div id="phone-row" class="mb-2 d-flex align-items-center gap-2 d-none">
+                    <i class="fas fa-phone text-primary flex-shrink-0"></i>
+                    <a href="#" id="panel-phone" class="text-decoration-none small fw-medium"></a>
+                </div>
+
+                @* Website *@
+                <div id="website-row" class="mb-3 d-flex align-items-center gap-2 d-none">
+                    <i class="fas fa-globe text-primary flex-shrink-0"></i>
+                    <a href="#" id="panel-website" target="_blank" rel="noopener noreferrer"
+                       class="text-decoration-none small fw-medium text-truncate" style="max-width:300px;"></a>
+                </div>
+
+                <hr class="my-3">
+
+                @* Opening Hours Accordion *@
+                <div id="hours-section" class="d-none mb-3">
+                    <div class="accordion accordion-flush" id="hoursAccordion">
+                        <div class="accordion-item border rounded">
+                            <h2 class="accordion-header" id="hours-heading">
+                                <button class="accordion-button collapsed py-2 px-3 small fw-semibold" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#hours-collapse"
+                                        aria-expanded="false" aria-controls="hours-collapse">
+                                    <i class="fas fa-clock me-2 text-primary"></i> Horário de Funcionamento
+                                </button>
+                            </h2>
+                            <div id="hours-collapse" class="accordion-collapse collapse"
+                                 aria-labelledby="hours-heading" data-bs-parent="#hoursAccordion">
+                                <div class="accordion-body py-2 px-3">
+                                    <ul class="list-unstyled mb-0 small" id="panel-hours-list">
+                                        @* Days injected by JS *@
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* Google Reviews *@
+                <div id="reviews-section" class="d-none">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="fab fa-google text-danger me-2"></i>Avaliações Google
+                    </h6>
+                    <div id="panel-reviews-list">
+                        @* Reviews injected by JS *@
+                    </div>
+                </div>
+
+                @* CTA Buttons *@
+                <div class="d-grid gap-2 mt-4 pb-4">
+                    <a href="#" id="btn-google-maps" target="_blank" rel="noopener noreferrer"
+                       class="btn btn-primary">
+                        <i class="fas fa-map-marked-alt me-2"></i>Ver no Google Maps
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@media (max-width: 767.98px) {
+        #placeDetailPanel {
+            width: 100% !important;
+        }
+        #placeDetailPanel.offcanvas-end {
+            /* On mobile, switch to bottom sheet behaviour */
+            top: auto;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100% !important;
+            max-height: 82vh;
+            border-radius: 1rem 1rem 0 0;
+            transform: translateY(100%);
+        }
+        #placeDetailPanel.offcanvas-end.show {
+            transform: translateY(0);
+        }
+    }
+
+    #placePhotoCarousel .carousel-inner img {
+        height: 220px;
+        object-fit: cover;
+        width: 100%;
+    }
+
+    .review-card {
+        background: #f8f9fa;
+        border-radius: 0.75rem;
+        padding: 0.85rem 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .review-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .review-text.expanded {
+        -webkit-line-clamp: unset;
+    }
+
+    .review-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        object-fit: cover;
+        background: #dee2e6;
+    }
+</style>

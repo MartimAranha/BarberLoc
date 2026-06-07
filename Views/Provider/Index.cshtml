@@ -1,0 +1,457 @@
+@model WebApplication1.Models.ViewModels.ProviderSearchViewModel
+@using WebApplication1.Models
+
+@{
+    ViewData["Title"] = "Explorar Barbearias e Cabeleireiros";
+}
+
+@* ── Hero Search Section ────────────────────────────────────────────────── *@
+<section class="provider-hero">
+    <div class="container">
+        <div class="row justify-content-center text-center mb-4">
+            <div class="col-lg-8">
+                <h1 class="provider-hero__title">
+                    <i class="fas fa-cut"></i> Encontre o seu profissional
+                </h1>
+                <p class="provider-hero__subtitle">
+                    Descubra barbearias e cabeleireiros perto de si — filtre por tipo, serviço e avaliação.
+                </p>
+            </div>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <form asp-action="Index" method="get" id="searchForm">
+                    <div class="provider-search-card card border-0 shadow-lg">
+                        <div class="card-body p-4">
+
+                            @* ── Keyword Search ── *@
+                            <div class="mb-4">
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text bg-white border-end-0">
+                                        <i class="fas fa-search text-muted"></i>
+                                    </span>
+                                    <input asp-for="SearchQuery"
+                                           type="text"
+                                           class="form-control border-start-0 ps-0"
+                                           placeholder="Pesquisar por nome, morada ou serviço..."
+                                           id="searchInput"
+                                           autocomplete="off" />
+                                    <button type="submit" class="btn btn-primary px-4" id="searchBtn">
+                                        Pesquisar
+                                    </button>
+                                </div>
+                            </div>
+
+                            @* ── Filter Row ── *@
+                            <div class="row g-3 align-items-end">
+                                @* Category Pills *@
+                                <div class="col-lg-5">
+                                    <label class="form-label fw-semibold text-muted small mb-2">
+                                        <i class="fas fa-tag me-1"></i> CATEGORIA
+                                    </label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        @{
+                                            var cats = new[] {
+                                                ("Barbershop", "fas fa-cut", "Barbearia"),
+                                                ("HairSalon", "fas fa-spa", "Cabeleireiro"),
+                                                ("Unisex", "fas fa-users", "Unisexo")
+                                            };
+                                        }
+                                        @foreach (var (val, icon, label) in cats)
+                                        {
+                                            var isSelected = Model.SelectedCategories.Contains(val);
+                                            <button type="button"
+                                                    class="btn btn-sm category-pill @(isSelected ? "active" : "")"
+                                                    data-category="@val"
+                                                    id="cat-@val">
+                                                <i class="@icon me-1"></i> @label
+                                            </button>
+                                        }
+                                    </div>
+                                    @* Hidden inputs for selected categories *@
+                                    <div id="categoryInputs">
+                                        @foreach (var cat in Model.SelectedCategories)
+                                        {
+                                            <input type="hidden" name="SelectedCategories" value="@cat" />
+                                        }
+                                    </div>
+                                </div>
+
+                                @* Gender Pills *@
+                                <div class="col-lg-4">
+                                    <label class="form-label fw-semibold text-muted small mb-2">
+                                        <i class="fas fa-venus-mars me-1"></i> GÉNERO
+                                    </label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        @{
+                                            var genders = new[] {
+                                                ("Male", "fas fa-mars", "Homem"),
+                                                ("Female", "fas fa-venus", "Mulher"),
+                                                ("Unisex", "fas fa-genderless", "Ambos")
+                                            };
+                                        }
+                                        @foreach (var (val, icon, label) in genders)
+                                        {
+                                            var isSelected = Model.SelectedGenders.Contains(val);
+                                            <button type="button"
+                                                    class="btn btn-sm gender-pill @(isSelected ? "active" : "")"
+                                                    data-gender="@val">
+                                                <i class="@icon me-1"></i> @label
+                                            </button>
+                                        }
+                                    </div>
+                                    <div id="genderInputs">
+                                        @foreach (var g in Model.SelectedGenders)
+                                        {
+                                            <input type="hidden" name="SelectedGenders" value="@g" />
+                                        }
+                                    </div>
+                                </div>
+
+                                @* Extra Filters *@
+                                <div class="col-lg-3">
+                                    <label class="form-label fw-semibold text-muted small mb-2">
+                                        <i class="fas fa-sliders-h me-1"></i> EXTRAS
+                                    </label>
+                                    <div class="d-flex gap-3 flex-wrap align-items-center">
+                                        <div class="form-check form-switch mb-0">
+                                            <input asp-for="MobileOnly" class="form-check-input" type="checkbox"
+                                                   role="switch" id="mobileOnlyToggle"
+                                                   onchange="this.form.submit()" />
+                                            <label class="form-check-label small" for="mobileOnlyToggle">
+                                                <i class="fas fa-motorcycle text-warning"></i> Domicílio
+                                            </label>
+                                        </div>
+                                        <select asp-for="MinRating" class="form-select form-select-sm" style="width:auto;"
+                                                onchange="this.form.submit()">
+                                            <option value="">⭐ Qualquer</option>
+                                            <option value="3">⭐ 3+</option>
+                                            <option value="4">⭐ 4+</option>
+                                            <option value="4.5">⭐ 4.5+</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ── Results Section ─────────────────────────────────────────────────────── *@
+<section class="container py-5">
+
+    @* Results Header *@
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            @if (!string.IsNullOrWhiteSpace(Model.SearchQuery) || Model.SelectedCategories.Any() || Model.MobileOnly)
+            {
+                <h2 class="h5 mb-1">
+                    <span class="badge bg-primary me-2">@Model.TotalCount</span>
+                    resultado@(Model.TotalCount != 1 ? "s" : "") encontrado@(Model.TotalCount != 1 ? "s" : "")
+                </h2>
+                <a asp-action="Index" class="text-muted small">
+                    <i class="fas fa-times-circle me-1"></i> Limpar filtros
+                </a>
+            }
+            else
+            {
+                <h2 class="h5 mb-0">
+                    <i class="fas fa-fire text-accent me-2"></i>
+                    Todos os prestadores <span class="text-muted fw-normal">(@Model.TotalCount)</span>
+                </h2>
+            }
+        </div>
+
+        @* Sort Selector *@
+        <form asp-action="Index" method="get" id="sortForm" class="d-flex align-items-center gap-2">
+            @* Preserve filters *@
+            @if (!string.IsNullOrWhiteSpace(Model.SearchQuery))
+            {
+                <input type="hidden" name="SearchQuery" value="@Model.SearchQuery" />
+            }
+            @foreach (var cat in Model.SelectedCategories)
+            {
+                <input type="hidden" name="SelectedCategories" value="@cat" />
+            }
+            @foreach (var g in Model.SelectedGenders)
+            {
+                <input type="hidden" name="SelectedGenders" value="@g" />
+            }
+            @if (Model.MobileOnly) { <input type="hidden" name="MobileOnly" value="true" /> }
+            @if (Model.MinRating.HasValue) { <input type="hidden" name="MinRating" value="@Model.MinRating" /> }
+
+            <label class="text-muted small mb-0 me-1">Ordenar:</label>
+            <select asp-for="SortBy" class="form-select form-select-sm" style="width:auto;" onchange="document.getElementById('sortForm').submit()">
+                <option value="rating">⭐ Avaliação</option>
+                <option value="name">🔤 Nome</option>
+                <option value="newest">🆕 Mais recente</option>
+            </select>
+        </form>
+    </div>
+
+    @* Result Cards Grid *@
+    @if (Model.HasResults)
+    {
+        <div class="row g-4" id="providerGrid">
+            @foreach (var provider in Model.Results)
+            {
+                var hasMobile = provider.Services.Any(s => s.IsAvailable && s.IsMobile);
+                var categoryLabel = provider.Category switch
+                {
+                    BarbershopCategory.HairSalon => "Cabeleireiro",
+                    BarbershopCategory.Unisex => "Unisexo",
+                    _ => "Barbearia"
+                };
+                var categoryColor = provider.Category switch
+                {
+                    BarbershopCategory.HairSalon => "bg-pink",
+                    BarbershopCategory.Unisex => "bg-info",
+                    _ => "bg-primary"
+                };
+
+                <div class="col-md-6 col-xl-4 provider-card-col">
+                    <div class="card provider-card h-100 border-0 shadow-sm">
+
+                        @* Image *@
+                        <div class="provider-card__img-wrap">
+                            @if (!string.IsNullOrEmpty(provider.ImageUrl))
+                            {
+                                <img src="@provider.ImageUrl" alt="@provider.Name" class="provider-card__img" loading="lazy" />
+                            }
+                            else
+                            {
+                                <div class="provider-card__img-placeholder">
+                                    <i class="fas @(provider.Category == BarbershopCategory.HairSalon ? "fa-spa" : "fa-cut") fa-3x text-white opacity-50"></i>
+                                </div>
+                            }
+
+                            @* Badges *@
+                            <div class="provider-card__badges">
+                                <span class="badge @categoryColor">@categoryLabel</span>
+                                @if (hasMobile)
+                                {
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fas fa-motorcycle me-1"></i>Domicílio
+                                    </span>
+                                }
+                            </div>
+
+                            @* Rating chip *@
+                            <div class="provider-card__rating">
+                                <i class="fas fa-star text-warning me-1"></i>
+                                <strong>@provider.AverageRating.ToString("0.0")</strong>
+                            </div>
+                        </div>
+
+                        <div class="card-body d-flex flex-column p-4">
+                            <h3 class="provider-card__name h5 mb-1">@provider.Name</h3>
+                            <p class="text-muted small mb-2">
+                                <i class="fas fa-map-marker-alt me-1 text-accent"></i>
+                                @provider.Address
+                            </p>
+
+                            @if (provider.Services.Any(s => s.IsAvailable))
+                            {
+                                <div class="d-flex gap-1 flex-wrap mb-3">
+                                    @foreach (var svc in provider.Services.Where(s => s.IsAvailable).Take(3))
+                                    {
+                                        <span class="badge bg-light text-dark border small">
+                                            @svc.Name — €@svc.Price.ToString("0.00")
+                                        </span>
+                                    }
+                                    @if (provider.Services.Count(s => s.IsAvailable) > 3)
+                                    {
+                                        <span class="badge bg-light text-muted border small">
+                                            +@(provider.Services.Count(s => s.IsAvailable) - 3) mais
+                                        </span>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(provider.PhoneNumber))
+                            {
+                                <p class="text-muted small mb-3">
+                                    <i class="fas fa-phone me-1"></i>
+                                    <a href="tel:@provider.PhoneNumber" class="text-muted text-decoration-none">@provider.PhoneNumber</a>
+                                </p>
+                            }
+
+                            <div class="mt-auto d-flex gap-2">
+                                <a asp-action="Details" asp-route-id="@provider.Id"
+                                   class="btn btn-primary flex-fill btn-sm" id="details-@provider.Id">
+                                    <i class="fas fa-info-circle me-1"></i> Ver Perfil
+                                </a>
+                                <a asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@provider.Id"
+                                   class="btn btn-outline-primary btn-sm" id="book-@provider.Id">
+                                    <i class="fas fa-calendar-plus me-1"></i> Reservar
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <div class="mb-4">
+                <i class="fas fa-search fa-4x text-muted opacity-50"></i>
+            </div>
+            <h3 class="text-muted">Nenhum resultado encontrado</h3>
+            <p class="text-muted">Tente remover alguns filtros ou alargue a pesquisa.</p>
+            <a asp-action="Index" class="btn btn-primary mt-2">
+                <i class="fas fa-redo me-2"></i> Limpar filtros
+            </a>
+        </div>
+    }
+</section>
+
+@section Scripts {
+<style>
+    .provider-hero {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        padding: 3rem 0 2rem;
+        margin-bottom: 0;
+    }
+    .provider-hero__title {
+        font-size: 2.4rem;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: -0.5px;
+    }
+    .provider-hero__subtitle {
+        color: rgba(255,255,255,0.7);
+        font-size: 1.1rem;
+    }
+    .provider-search-card {
+        border-radius: 16px;
+        background: #fff;
+    }
+    .category-pill, .gender-pill {
+        border: 2px solid #dee2e6;
+        background: #f8f9fa;
+        color: #495057;
+        border-radius: 50px;
+        transition: all 0.2s;
+        font-size: 0.8rem;
+    }
+    .category-pill:hover, .gender-pill:hover,
+    .category-pill.active, .gender-pill.active {
+        border-color: var(--bs-primary, #4361ee);
+        background: var(--bs-primary, #4361ee);
+        color: #fff;
+    }
+    .provider-card {
+        border-radius: 16px;
+        transition: transform 0.25s, box-shadow 0.25s;
+        overflow: hidden;
+    }
+    .provider-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.12) !important;
+    }
+    .provider-card__img-wrap {
+        position: relative;
+        height: 200px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #4361ee, #7209b7);
+    }
+    .provider-card__img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.4s;
+    }
+    .provider-card:hover .provider-card__img {
+        transform: scale(1.05);
+    }
+    .provider-card__img-placeholder {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .provider-card__badges {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .provider-card__rating {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        background: rgba(0,0,0,0.65);
+        color: #fff;
+        padding: 4px 10px;
+        border-radius: 50px;
+        font-size: 0.85rem;
+        backdrop-filter: blur(4px);
+    }
+    .provider-card__name {
+        font-weight: 700;
+        color: #1a1a2e;
+    }
+    .bg-pink { background-color: #e91e8c !important; }
+    .text-accent { color: #4361ee; }
+</style>
+<script>
+    // ── Category pill toggle ──
+    document.querySelectorAll('.category-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.classList.toggle('active');
+            updateHiddenInputs('categoryInputs', 'SelectedCategories', 'category-pill');
+            document.getElementById('searchForm').submit();
+        });
+    });
+
+    // ── Gender pill toggle ──
+    document.querySelectorAll('.gender-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.classList.toggle('active');
+            updateHiddenInputs('genderInputs', 'SelectedGenders', 'gender-pill');
+            document.getElementById('searchForm').submit();
+        });
+    });
+
+    function updateHiddenInputs(containerId, inputName, pillClass) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        document.querySelectorAll('.' + pillClass + '.active').forEach(pill => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = inputName;
+            input.value = pill.dataset.category || pill.dataset.gender;
+            container.appendChild(input);
+        });
+    }
+
+    // ── Card entrance animation ──
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry, i) => {
+            if (entry.isIntersecting) {
+                setTimeout(() => {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }, i * 60);
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.provider-card-col').forEach(el => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(24px)';
+        el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        observer.observe(el);
+    });
+</script>
+}

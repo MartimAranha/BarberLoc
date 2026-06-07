@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using WebApplication1.Data;
 using WebApplication1.Models;
+using WebApplication1.Services;
 
 namespace WebApplication1
 {
@@ -14,6 +15,10 @@ namespace WebApplication1
             // Add services to the container.
             builder.Services.AddControllersWithViews();
             builder.Services.AddMemoryCache();
+            
+            // Register Google Places service with a named/typed HttpClient
+            builder.Services.AddHttpClient<GooglePlacesService>();
+            builder.Services.AddScoped<IGooglePlacesService, GooglePlacesService>();
             
             // Add DbContext with SQL Server
             builder.Services.AddDbContext<ApplicationDbContext>(options =>

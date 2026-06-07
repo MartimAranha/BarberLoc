@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
 using WebApplication1.Models;
+using WebApplication1.Models.ViewModels;
 
 namespace WebApplication1.Controllers
 {
@@ -19,7 +20,7 @@ namespace WebApplication1.Controllers
             _userManager = userManager;
         }
 
-        // GET: Bookings
+        // ── GET: /Bookings ─────────────────────────────────────────────────────
         public async Task<IActionResult> Index()
         {
             var user = await _userManager.GetUserAsync(User);
@@ -29,99 +30,97 @@ namespace WebApplication1.Controllers
                 .Where(b => b.UserId == user!.Id)
                 .OrderByDescending(b => b.BookingDate)
                 .ToListAsync();
-                
+
             return View(bookings);
         }
 
-        private static double HaversineDistance(double lat1, double lon1, double lat2, double lon2)
-        {
-            double R = 6371.0; // km
-            var dLat = ToRadians(lat2 - lat1);
-            var dLon = ToRadians(lon2 - lon1);
-            var a = Math.Sin(dLat/2) * Math.Sin(dLat/2) + Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) * Math.Sin(dLon/2) * Math.Sin(dLon/2);
-            var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1-a));
-            return R * c;
-        }
-
-        private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
-
-        // GET: Bookings/Create
-        public async Task<IActionResult> Create(int? barbershopId, double? userLat, double? userLng)
+        // ── GET: /Bookings/Create?barbershopId={id} ────────────────────────────
+        public async Task<IActionResult> Create(int? barbershopId)
         {
             if (barbershopId == null)
-            {
                 return NotFound();
-            }
 
             var barbershop = await _context.Barbershops
                 .Include(b => b.Services)
-                .FirstOrDefaultAsync(b => b.Id == barbershopId);
-                
-            if (barbershop == null)
-            {
-                return NotFound();
-            }
+                .FirstOrDefaultAsync(b => b.Id == barbershopId && b.IsActive);
 
-            ViewBag.Barbershop = barbershop;
-            ViewBag.Services = barbershop.Services.Where(s => s.IsAvailable).ToList();
-            // default travel estimate not calculated here; will compute on POST if IsOnSite true
-            
-            return View(new Booking { BarbershopId = barbershop.Id });
+            if (barbershop == null)
+                return NotFound();
+
+            var vm = new AppointmentCreateViewModel
+            {
+                BarbershopId = barbershop.Id,
+                Barbershop = barbershop,
+                AvailableServices = barbershop.Services.Where(s => s.IsAvailable).ToList()
+            };
+
+            return View(vm);
         }
 
-        // POST: Bookings/Create
+        // ── POST: /Bookings/Create ─────────────────────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("BarbershopId,ServiceId,BookingDate,BookingTime,Notes,IsOnSite")] Booking booking, double? userLat, double? userLng)
+        public async Task<IActionResult> Create(AppointmentCreateViewModel vm)
         {
-            var user = await _userManager.GetUserAsync(User);
-            
+            // Reload barbershop for display and additional validation
+            var barbershop = await _context.Barbershops
+                .Include(b => b.Services)
+                .FirstOrDefaultAsync(b => b.Id == vm.BarbershopId && b.IsActive);
+
+            if (barbershop == null)
+                return NotFound();
+
+            vm.Barbershop = barbershop;
+            vm.AvailableServices = barbershop.Services.Where(s => s.IsAvailable).ToList();
+
+            // ── Additional custom validation ───────────────────────────────────
+            if (vm.BookingDate.Date < DateTime.Today.AddDays(1))
+                ModelState.AddModelError(nameof(vm.BookingDate), "A data da reserva deve ser a partir de amanhã.");
+
+            if (vm.IsOnSite && vm.ServiceId.HasValue)
+            {
+                var selectedService = barbershop.Services.FirstOrDefault(s => s.Id == vm.ServiceId);
+                if (selectedService != null && !selectedService.IsMobile)
+                    ModelState.AddModelError(nameof(vm.ServiceId), "O serviço selecionado não está disponível ao domicílio. Escolha um serviço com domicílio ou desative a opção.");
+            }
+
             if (!ModelState.IsValid)
-            {
-                var barbershop = await _context.Barbershops
-                    .Include(b => b.Services)
-                    .FirstOrDefaultAsync(b => b.Id == booking.BarbershopId);
-                
-                ViewBag.Barbershop = barbershop;
-                ViewBag.Services = barbershop?.Services.Where(s => s.IsAvailable).ToList();
-                return View(booking);
-            }
+                return View(vm);
 
+            var user = await _userManager.GetUserAsync(User);
             if (user == null)
-            {
                 return Challenge();
-            }
 
-            booking.UserId = user.Id;
-            booking.Status = BookingStatus.Pending;
-            booking.CreatedAt = DateTime.Now;
-            // Guardar telefone do utilizador se existir para uso posterior (por exemplo, mostrar na confirmação)
-            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            // ── Build the Booking entity ──────────────────────────────────────
+            var booking = new Booking
             {
-                ViewBag.UserPhone = user.PhoneNumber;
-            }
+                UserId = user.Id,
+                BarbershopId = vm.BarbershopId,
+                ServiceId = vm.ServiceId,
+                BookingDate = vm.BookingDate,
+                BookingTime = vm.BookingTime,
+                Notes = vm.Notes,
+                IsOnSite = vm.IsOnSite,
+                Status = BookingStatus.Pending,
+                CreatedAt = DateTime.Now
+            };
 
-
-            // If on-site requested, compute travel distance and fee (straight-line approximation)
-            if (booking.IsOnSite && userLat.HasValue && userLng.HasValue)
+            // ── Compute travel fee if home service requested ───────────────────
+            if (booking.IsOnSite && vm.UserLat.HasValue && vm.UserLng.HasValue)
             {
-                var shop = await _context.Barbershops.FindAsync(booking.BarbershopId);
-                if (shop != null)
-                {
-                    var dist = HaversineDistance(userLat.Value, userLng.Value, shop.Latitude, shop.Longitude);
-                    booking.TravelDistanceKm = Math.Round(dist, 2);
-                    booking.TravelFee = Math.Round(5.0m + (decimal)dist * 0.75m, 2);
-                }
+                var dist = HaversineDistance(vm.UserLat.Value, vm.UserLng.Value, barbershop.Latitude, barbershop.Longitude);
+                booking.TravelDistanceKm = Math.Round(dist, 2);
+                booking.TravelFee = Math.Round(5.0m + (decimal)dist * 0.75m, 2);
             }
 
             _context.Add(booking);
             await _context.SaveChangesAsync();
-            
+
             TempData["Success"] = "Reserva criada com sucesso! Aguarde a confirmação da barbearia.";
             return RedirectToAction(nameof(Index));
         }
 
-        // GET: Bookings/EstimateFee
+        // ── GET: /Bookings/EstimateFee ─────────────────────────────────────────
         [HttpGet]
         public async Task<JsonResult> EstimateFee(int barbershopId, double userLat, double userLng)
         {
@@ -133,24 +132,42 @@ namespace WebApplication1.Controllers
             return Json(new { distanceKm = Math.Round(dist, 2), fee });
         }
 
-        // POST: Bookings/Cancel/5
+        // ── POST: /Bookings/Cancel/{id} ────────────────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Cancel(int id)
         {
             var user = await _userManager.GetUserAsync(User);
             var booking = await _context.Bookings.FindAsync(id);
-            
+
             if (booking == null || booking.UserId != user!.Id)
-            {
                 return NotFound();
+
+            if (booking.Status == BookingStatus.Completed)
+            {
+                TempData["Error"] = "Não é possível cancelar uma reserva já concluída.";
+                return RedirectToAction(nameof(Index));
             }
 
             booking.Status = BookingStatus.Cancelled;
             await _context.SaveChangesAsync();
-            
+
             TempData["Success"] = "Reserva cancelada com sucesso.";
             return RedirectToAction(nameof(Index));
         }
+
+        // ── Haversine Distance Utility ─────────────────────────────────────────
+        private static double HaversineDistance(double lat1, double lon1, double lat2, double lon2)
+        {
+            const double R = 6371.0;
+            var dLat = ToRadians(lat2 - lat1);
+            var dLon = ToRadians(lon2 - lon1);
+            var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+                  + Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2))
+                  * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+            return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        }
+
+        private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
     }
 }

@@ -1,10 +1,11 @@
-using System;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
-using WebApplication1.Data;
 using Microsoft.Extensions.Caching.Memory;
+using WebApplication1.Data;
 using WebApplication1.Models;
+using WebApplication1.Services;
 
 namespace WebApplication1.Controllers
 {
@@ -13,142 +14,99 @@ namespace WebApplication1.Controllers
         private readonly ApplicationDbContext _context;
         private readonly IConfiguration _config;
         private readonly IMemoryCache _cache;
+        private readonly IGooglePlacesService _googlePlaces;
 
-        public BarbershopsController(ApplicationDbContext context, IConfiguration config, IMemoryCache cache)
+        public BarbershopsController(
+            ApplicationDbContext context,
+            IConfiguration config,
+            IMemoryCache cache,
+            IGooglePlacesService googlePlaces)
         {
             _context = context;
             _config = config;
             _cache = cache;
+            _googlePlaces = googlePlaces;
         }
 
-        // GET: Barbershops
-        public async Task<IActionResult> Index(string searchString, string sortOrder, string category)
+        // GET: /Barbershops — About/info page
+        public async Task<IActionResult> Index()
         {
-            ViewData["NameSortParm"] = String.IsNullOrEmpty(sortOrder) ? "name_desc" : "";
-            ViewData["RatingSortParm"] = sortOrder == "Rating" ? "rating_desc" : "Rating";
-            ViewData["CurrentFilter"] = searchString;
-            ViewData["CurrentCategory"] = category;
+            var barbershops = await _context.Barbershops
+                .Where(b => b.IsActive)
+                .OrderByDescending(b => b.AverageRating)
+                .Take(6)
+                .ToListAsync();
 
-            var barbershops = from b in _context.Barbershops
-                            .Include(b => b.Reviews)
-                            select b;
-
-            if (!String.IsNullOrEmpty(searchString))
-            {
-                barbershops = barbershops.Where(b => b.Name.Contains(searchString)
-                                       || b.Address.Contains(searchString));
-            }
-
-            if (!String.IsNullOrEmpty(category))
-            {
-                if (Enum.TryParse<BarbershopCategory>(category, out var cat))
-                {
-                    barbershops = barbershops.Where(b => b.Category == cat);
-                }
-            }
-
-            switch (sortOrder)
-            {
-                case "name_desc":
-                    barbershops = barbershops.OrderByDescending(b => b.Name);
-                    break;
-                case "Rating":
-                    barbershops = barbershops.OrderBy(b => b.AverageRating);
-                    break;
-                case "rating_desc":
-                    barbershops = barbershops.OrderByDescending(b => b.AverageRating);
-                    break;
-                default:
-                    barbershops = barbershops.OrderBy(b => b.Name);
-                    break;
-            }
-
-            return View(await barbershops.Where(b => b.IsActive).ToListAsync());
+            return View(barbershops);
         }
 
-        // GET: Barbershops/Details/5
+        // GET: /Barbershops/Details/5
         public async Task<IActionResult> Details(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
 
             var barbershop = await _context.Barbershops
+                .Include(b => b.Services)
                 .Include(b => b.Reviews)
                     .ThenInclude(r => r.User)
-                .Include(b => b.Services)
-                .FirstOrDefaultAsync(m => m.Id == id);
-                
-            if (barbershop == null)
-            {
-                return NotFound();
-            }
+                .FirstOrDefaultAsync(b => b.Id == id && b.IsActive);
+
+            if (barbershop == null) return NotFound();
 
             return View(barbershop);
         }
 
-        // GET: Barbershops/Map
-        public IActionResult Map()
+        // GET: /Barbershops/Map
+        public async Task<IActionResult> Map()
         {
-            // Provide Google Maps API key from environment variable (for quick testing) or configuration
-            // WARNING: This is a temporary testing hook. Do not commit hardcoded secrets.
             var testKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY_TEST");
-            if (!string.IsNullOrWhiteSpace(testKey))
-            {
-                ViewData["GoogleApiKey"] = testKey;
-            }
-            else
-            {
-                ViewData["GoogleApiKey"] = _config["Google:ApiKey"] ?? string.Empty;
-            }
+            ViewData["GoogleApiKey"] = !string.IsNullOrWhiteSpace(testKey) ? testKey : (_config["Google:ApiKey"] ?? string.Empty);
             return View();
         }
 
-        // GET: Barbershops/GetMapData
-        // Supports optional query params: lat, lng, radiusKm (defaults to 10), minRating, categories (comma separated: Barbershop,HairSalon,Unisex)
+        // GET: /Barbershops/GetMapData
         [HttpGet]
         public async Task<JsonResult> GetMapData(double? lat, double? lng, double? radiusKm, double? minRating, string? categories, string? genders, bool? mobileOnly)
         {
-            var cats = new List<string>();
-            if (!string.IsNullOrEmpty(categories))
-            {
-                cats = categories.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
-            }
+            var cats = !string.IsNullOrEmpty(categories) ? categories.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList() : new List<string>();
+            var genderFilters = !string.IsNullOrEmpty(genders) ? genders.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList() : new List<string>();
 
-            var genderFilters = new List<string>();
-            if (!string.IsNullOrEmpty(genders))
-            {
-                genderFilters = genders.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
-            }
-
-            // Load barbershops with services for filtering capabilities
             var bars = await _context.Barbershops
                 .Include(b => b.Services)
                 .Where(b => b.IsActive)
                 .ToListAsync();
 
-            // Filter by category if provided
             if (cats.Any())
-            {
                 bars = bars.Where(b => cats.Contains(b.Category.ToString())).ToList();
-            }
 
             var results = new List<object>();
             foreach (var b in bars)
             {
-                // mobile availability and gender match logic
                 var hasMobile = b.Services != null && b.Services.Any(s => s.IsAvailable && s.IsMobile);
                 var genderMatch = true;
                 if (genderFilters.Any())
                 {
-                    genderMatch = b.Services != null && b.Services.Any(s => s.IsAvailable && (genderFilters.Contains(s.TargetGender.ToString()) || s.TargetGender == Models.TargetGender.Unisex));
+                    genderMatch = b.Services != null && b.Services.Any(s =>
+                        s.IsAvailable &&
+                        (genderFilters.Contains(s.TargetGender.ToString()) || s.TargetGender == Models.TargetGender.Unisex));
                 }
 
                 if (!genderMatch) continue;
                 if (mobileOnly == true && !hasMobile) continue;
 
-                results.Add(new {
+                // Distance filter
+                if (lat.HasValue && lng.HasValue && radiusKm.HasValue)
+                {
+                    var dist = HaversineDistance(lat.Value, lng.Value, b.Latitude, b.Longitude);
+                    if (dist > radiusKm.Value) continue;
+                }
+
+                // Rating filter
+                if (minRating.HasValue && b.AverageRating < minRating.Value)
+                    continue;
+
+                results.Add(new
+                {
                     id = b.Id,
                     name = b.Name,
                     lat = b.Latitude,
@@ -163,148 +121,218 @@ namespace WebApplication1.Controllers
                 });
             }
 
-            // If lat/lng provided, compute distances and potential travel fee
-
-            if (lat.HasValue && lng.HasValue)
-            {
-                var radius = radiusKm ?? 10.0;
-                var enriched = new List<object>();
-                foreach (var r in results)
-                {
-                    // dynamic access
-                    var dlat = (double)r.GetType().GetProperty("lat")!.GetValue(r)!;
-                    var dlng = (double)r.GetType().GetProperty("lng")!.GetValue(r)!;
-                    var dist = HaversineDistance(lat.Value, lng.Value, dlat, dlng);
-                    if (dist <= radius)
-                    {
-                        // estimate travel fee: base 5 + 0.75 per km if hasMobile
-                        var hasMobileFlag = (bool)r.GetType().GetProperty("hasMobile")!.GetValue(r)!;
-                        decimal? fee = null;
-                        if (hasMobileFlag)
-                        {
-                            fee = Math.Round(5.0m + (decimal)dist * 0.75m, 2);
-                        }
-
-                        enriched.Add(new {
-                            id = r.GetType().GetProperty("id")!.GetValue(r),
-                            name = r.GetType().GetProperty("name")!.GetValue(r),
-                            lat = dlat,
-                            lng = dlng,
-                            address = r.GetType().GetProperty("address")!.GetValue(r),
-                            category = r.GetType().GetProperty("category")!.GetValue(r),
-                            rating = r.GetType().GetProperty("rating")!.GetValue(r),
-                            image = r.GetType().GetProperty("image")?.GetValue(r),
-                            phone = r.GetType().GetProperty("phone")?.GetValue(r),
-                            hasMobile = hasMobileFlag,
-                            distanceKm = Math.Round(dist, 2),
-                            estimatedTravelFee = fee
-                        });
-                    }
-                }
-
-                return Json(enriched.OrderByDescending(x => (double)x.GetType().GetProperty("rating")!.GetValue(x)).ToList());
-            }
-
-            if (minRating.HasValue)
-            {
-                var min = minRating.Value;
-                var filtered = results.Where(r => (double)r.GetType().GetProperty("rating")!.GetValue(r)! >= min).OrderByDescending(r => (double)r.GetType().GetProperty("rating")!.GetValue(r)! ).ToList();
-                return Json(filtered);
-            }
-
             return Json(results.OrderByDescending(r => (double)r.GetType().GetProperty("rating")!.GetValue(r)!).Take(50));
         }
 
-        private static double HaversineDistance(double lat1, double lon1, double lat2, double lon2)
-        {
-            double R = 6371.0; // km
-            var dLat = ToRadians(lat2 - lat1);
-            var dLon = ToRadians(lon2 - lon1);
-            var a = Math.Sin(dLat/2) * Math.Sin(dLat/2) + Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) * Math.Sin(dLon/2) * Math.Sin(dLon/2);
-            var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1-a));
-            return R * c;
-        }
-
-        private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
-
-        // GET: Barbershops/GetReviews?placeId=...
+        // GET: /Barbershops/GetReviews?placeId=...
         [HttpGet]
         public async Task<JsonResult> GetReviews(string placeId)
         {
-            if (string.IsNullOrEmpty(placeId)) return Json(new { success = false, message = "no placeId" });
+            if (string.IsNullOrWhiteSpace(placeId))
+                return Json(new { success = false, message = "PlaceId em falta." });
 
-            var cacheKey = "gm_reviews_" + placeId;
-            if (_cache.TryGetValue(cacheKey, out object cached))
+            var result = await _googlePlaces.GetPlaceDetailsAsync(placeId);
+            if (result == null)
+                return Json(new { success = false, message = "Não foi possível obter dados." });
+
+            return Json(new
             {
-                return Json(new { success = true, reviews = cached });
+                success = true,
+                isMock = result.IsMockData,
+                rating = result.Rating,
+                userRatingsTotal = result.UserRatingsTotal,
+                googleMapsUrl = result.GoogleMapsUrl,
+                reviews = result.Reviews.Select(r => new
+                {
+                    author_name = r.AuthorName,
+                    rating = r.Rating,
+                    text = r.Text,
+                    relative_time_description = r.RelativeTimeDescription,
+                    profile_photo_url = r.AuthorPhotoUrl
+                })
+            });
+        }
+
+        // ── NEW: GET /Barbershops/PlaceDetails?placeId=... ───────────────────────
+        // AJAX endpoint called by the map JS on marker click.
+        // Returns full place details for the offcanvas panel.
+        [HttpGet]
+        public async Task<IActionResult> PlaceDetails(string? placeId)
+        {
+            if (string.IsNullOrWhiteSpace(placeId))
+                return BadRequest(new { success = false, message = "placeId is required." });
+
+            var result = await _googlePlaces.GetFullPlaceDetailsAsync(placeId);
+
+            if (result == null)
+                return StatusCode(500, new { success = false, message = "Could not retrieve place details." });
+
+            // Resolve photo proxy URLs server-side so JS never sees photo_reference
+            var photosWithUrls = result.Photos.Select((p, i) => new
+            {
+                index = i,
+                proxyUrl = p.GetProxyUrl(800),
+                width = p.Width,
+                height = p.Height
+            }).ToList();
+
+            // Check if this place is favourited by the current user
+            var isFavourited = false;
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                isFavourited = await _context.FavouritePlaces
+                    .AnyAsync(f => f.UserId == userId && f.PlaceId == placeId);
             }
 
-            var apiKey = _config["Google:ApiKey"];
-            if (string.IsNullOrEmpty(apiKey))
+            return Json(new
             {
-                // Fallback to mock Google reviews if no API key is configured
-                var mockReviews = GenerateMockGoogleReviews(placeId);
-                return Json(new { success = true, reviews = mockReviews, isMock = true });
-            }
+                success = true,
+                isMock = result.IsMockData,
+                placeId = result.PlaceId,
+                name = result.Name,
+                formattedAddress = result.FormattedAddress,
+                formattedPhoneNumber = result.FormattedPhoneNumber,
+                website = result.Website,
+                rating = result.Rating,
+                userRatingsTotal = result.UserRatingsTotal,
+                googleMapsUrl = result.GoogleMapsUrl,
+                isOpenNow = result.OpeningHours?.IsOpenNow,
+                weekdayText = result.OpeningHours?.WeekdayText ?? new List<string>(),
+                photos = photosWithUrls,
+                reviews = result.Reviews.Select(r => new
+                {
+                    authorName = r.AuthorName,
+                    profilePhotoUrl = r.ProfilePhotoUrl,
+                    rating = r.Rating,
+                    relativeTimeDescription = r.RelativeTimeDescription,
+                    text = r.Text
+                }),
+                isFavourited = isFavourited
+            });
+        }
+
+        // ── NEW: GET /Barbershops/PlacePhoto?ref=...&maxWidth=400 ────────────────
+        // Photo proxy: fetches the Google Places photo server-side so the API key
+        // never appears in browser requests or JS source.
+        [HttpGet]
+        public async Task<IActionResult> PlacePhoto(string? @ref, int maxWidth = 800)
+        {
+            if (string.IsNullOrWhiteSpace(@ref))
+                return BadRequest();
+
+            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return NotFound();
+
+            var url = $"https://maps.googleapis.com/maps/api/place/photo" +
+                      $"?maxwidth={maxWidth}" +
+                      $"&photo_reference={Uri.EscapeDataString(@ref)}" +
+                      $"&key={apiKey}";
 
             try
             {
-                using var http = new System.Net.Http.HttpClient();
-                var url = $"https://maps.googleapis.com/maps/api/place/details/json?place_id={placeId}&fields=name,rating,reviews&key={apiKey}";
-                var resp = await http.GetAsync(url);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    return Json(new { success = true, reviews = GenerateMockGoogleReviews(placeId), isMock = true });
-                }
-                var json = await resp.Content.ReadAsStringAsync();
-                _cache.Set(cacheKey, json, TimeSpan.FromHours(1));
-                return Json(new { success = true, reviews = json });
+                using var httpClient = new HttpClient();
+                httpClient.Timeout = TimeSpan.FromSeconds(10);
+                // Google Places photo API redirects to the actual image — follow it
+                var response = await httpClient.GetAsync(url);
+
+                if (!response.IsSuccessStatusCode)
+                    return NotFound();
+
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                return File(bytes, contentType);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return Json(new { success = true, reviews = GenerateMockGoogleReviews(placeId), isMock = true });
+                var logger = HttpContext.RequestServices.GetRequiredService<ILogger<BarbershopsController>>();
+                logger.LogWarning(ex, "Failed to proxy photo reference {Ref}.", @ref);
+                return NotFound();
             }
         }
 
-        private string GenerateMockGoogleReviews(string placeId)
+        // ── NEW: POST /Barbershops/SaveFavourite ─────────────────────────────────
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveFavourite([FromBody] SaveFavouriteRequest request)
         {
-            var shop = _context.Barbershops.FirstOrDefault(b => b.PlaceId == placeId);
-            var shopName = shop?.Name ?? "Estabelecimento";
-            var rating = shop?.AverageRating ?? 4.5;
-            
-            var reviews = new[]
+            if (request == null || string.IsNullOrWhiteSpace(request.PlaceId))
+                return BadRequest(new { success = false, message = "Invalid request." });
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+                return Unauthorized();
+
+            // Idempotent — do nothing if already favourited
+            var exists = await _context.FavouritePlaces
+                .AnyAsync(f => f.UserId == userId && f.PlaceId == request.PlaceId);
+
+            if (!exists)
             {
-                new {
-                    author_name = "Carlos Martins",
-                    rating = 5,
-                    relative_time_description = "há uma semana",
-                    text = $"Excelente atendimento no {shopName}! O corte ficou exatamente como pedi e o ambiente é fantástico. Recomendo muito!"
-                },
-                new {
-                    author_name = "Ana Rodrigues",
-                    rating = 4,
-                    relative_time_description = "há 2 semanas",
-                    text = $"Muito profissional. Fui muito bem recebida e o serviço foi rápido e de qualidade. A repetir, sem dúvida."
-                },
-                new {
-                    author_name = "Pedro Silva",
-                    rating = 5,
-                    relative_time_description = "há um mês",
-                    text = $"Melhor sítio da região para cuidar do cabelo e barba. O staff é super simpático e atencioso. 5 estrelas!"
-                }
-            };
-            
-            var result = new {
-                result = new {
-                    name = shopName,
-                    rating = rating,
-                    reviews = reviews
-                }
-            };
-            
-            return System.Text.Json.JsonSerializer.Serialize(result);
+                _context.FavouritePlaces.Add(new FavouritePlace
+                {
+                    UserId = userId,
+                    PlaceId = request.PlaceId,
+                    PlaceName = request.PlaceName ?? "Barbearia",
+                    PlaceAddress = request.PlaceAddress,
+                    SavedAt = DateTime.UtcNow
+                });
+
+                await _context.SaveChangesAsync();
+            }
+
+            return Json(new { success = true, isFavourited = true });
         }
 
+        // ── NEW: POST /Barbershops/RemoveFavourite ───────────────────────────────
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveFavourite([FromBody] SaveFavouriteRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.PlaceId))
+                return BadRequest(new { success = false, message = "Invalid request." });
 
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+                return Unauthorized();
+
+            var favourite = await _context.FavouritePlaces
+                .FirstOrDefaultAsync(f => f.UserId == userId && f.PlaceId == request.PlaceId);
+
+            if (favourite != null)
+            {
+                _context.FavouritePlaces.Remove(favourite);
+                await _context.SaveChangesAsync();
+            }
+
+            return Json(new { success = true, isFavourited = false });
+        }
+
+        // ── Haversine Distance Utility ─────────────────────────────────────────
+        private static double HaversineDistance(double lat1, double lon1, double lat2, double lon2)
+        {
+            const double R = 6371.0;
+            var dLat = ToRadians(lat2 - lat1);
+            var dLon = ToRadians(lon2 - lon1);
+            var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+                  + Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2))
+                  * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+            return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        }
+
+        private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
+    }
+
+    /// <summary>
+    /// Request body for SaveFavourite / RemoveFavourite AJAX calls.
+    /// </summary>
+    public class SaveFavouriteRequest
+    {
+        public string? PlaceId { get; set; }
+        public string? PlaceName { get; set; }
+        public string? PlaceAddress { get; set; }
     }
 }

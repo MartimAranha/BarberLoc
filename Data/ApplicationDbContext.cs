@@ -15,6 +15,8 @@ namespace WebApplication1.Data
         public DbSet<Service> Services { get; set; }
         public DbSet<Booking> Bookings { get; set; }
         public DbSet<Review> Reviews { get; set; }
+        public DbSet<CachedGoogleReview> CachedGoogleReviews { get; set; }
+        public DbSet<FavouritePlace> FavouritePlaces { get; set; }
         
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -50,6 +52,22 @@ namespace WebApplication1.Data
                 .WithMany(b => b.Services)
                 .HasForeignKey(s => s.BarbershopId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<CachedGoogleReview>()
+                .HasIndex(c => c.PlaceId)
+                .IsUnique();
+
+            // FavouritePlace → ApplicationUser (string PK from Identity)
+            builder.Entity<FavouritePlace>()
+                .HasOne(f => f.User)
+                .WithMany()
+                .HasForeignKey(f => f.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Prevent duplicate favourites per user
+            builder.Entity<FavouritePlace>()
+                .HasIndex(f => new { f.UserId, f.PlaceId })
+                .IsUnique();
         }
     }
 }
