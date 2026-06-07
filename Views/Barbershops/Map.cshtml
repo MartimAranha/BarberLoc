@@ -4,91 +4,15 @@
 
 <div class="container-fluid px-0">
     <div class="row g-0">
-        <!-- Sidebar / Filter Panel -->
         <div class="col-md-3 p-3 bg-light border-end" style="height: calc(100vh - 56px); overflow-y: auto;">
-            <h4 class="mb-4"><i class="fas fa-map-marked-alt text-primary"></i> Explorar Mapa</h4>
-            
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-3 text-muted">Filtros</h6>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="checkAll" checked>
-                        <label class="form-check-label" for="checkAll">Selecionar Todos</label>
-                    </div>
-                    <hr>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input category-filter" type="checkbox" value="Barbershop" id="filterBarber" checked>
-                        <label class="form-check-label" for="filterBarber">Barbearias</label>
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input category-filter" type="checkbox" value="HairSalon" id="filterSalon" checked>
-                        <label class="form-check-label" for="filterSalon">Cabeleireiros</label>
-                    </div>
-                <hr>
-                <h6 class="card-subtitle mb-2 text-muted">Serviço em Casa</h6>
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" id="mobileOnly">
-                    <label class="form-check-label" for="mobileOnly">Mostrar só com atendimento em casa</label>
-                </div>
-                <div class="mb-2">
-                    <label class="form-label small">Género</label>
-                    <div class="d-flex gap-2">
-                        <select id="genderSelect" class="form-select form-select-sm">
-                            <option value="">Todos</option>
-                            <option value="Male">Masculino</option>
-                            <option value="Female">Feminino</option>
-                            <option value="Unisex">Unisexo</option>
-                        </select>
-                    </div>
-                </div>
-                </div>
-
-@* <!-- TEMP DEBUG: show which Google API key arrived from the controller -->
-<div class="container mt-2">
-    <p><strong>Debug:</strong> The key that arrived is: @ViewData["GoogleApiKey"]</p>
-</div> *@
-            </div>
-
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-2 text-muted">Legenda</h6>
-                    <ul class="list-unstyled small mb-0">
-                        <li class="mb-1"><span class="badge bg-primary rounded-circle p-1 me-2" style="width: 12px; height: 12px; display: inline-block;"> </span> Resultados Google Maps</li>
-                    </ul>
-                </div>
-            </div>
-             
-            <!-- Place details panel (persistent) -->
-            <div id="placeDetails" class="mt-4" style="display:none;"></div>
-
-            <div id="locationsList" class="mt-4">
-                <!-- List of visible locations will be populated here -->
-            </div>
+            <h4><i class="fas fa-map-marked-alt text-primary"></i> Explorar Mapa</h4>
+            <div id="locationsList" class="mt-4"></div>
         </div>
 
-        <!-- Map Container -->
         <div class="col-md-9 position-relative">
             <div id="map" style="height: calc(100vh - 56px); width: 100%;"></div>
-
-            <!-- My Location Button (Styled like Google Maps GPS button) -->
-            <button id="locateBtn" class="btn btn-light position-absolute rounded-circle shadow d-flex align-items-center justify-content-center" 
-                    style="z-index:1001; top: 1rem; right: 1rem; width: 44px; height: 44px; padding: 0; border: 1px solid rgba(0,0,0,0.1);" 
-                    title="Minha Localização">
-                <i class="fas fa-crosshairs text-primary" style="font-size: 1.25rem;"></i>
-            </button>
-            
-            <!-- Loading Overlay -->
-            <div id="mapLoading" class="position-absolute top-50 start-50 translate-middle bg-white p-3 rounded shadow" style="z-index: 1000; display: none;">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                Pesquisando barbearias...
-            </div>
-            <!-- Debug panel (hidden by default) -->
-            <div id="debugPanel" class="position-absolute" style="z-index:1100; top:1rem; left:1rem; min-width:220px; max-width:320px; display:none;">
-                <div class="card bg-light shadow-sm">
-                    <div class="card-body p-2 small text-danger" id="debugContent"></div>
-                </div>
+            <div id="mapLoading" class="position-absolute top-50 start-50 translate-middle bg-white p-3 rounded shadow" style="display: none; z-index: 1000;">
+                <div class="spinner-border text-primary" role="status"></div> Pesquisando...
             </div>
         </div>
     </div>
@@ -97,41 +21,41 @@
 @section Scripts {
     @{
         var gkey = ViewData["GoogleApiKey"] as string ?? "";
-        var isPlaceholder = string.IsNullOrWhiteSpace(gkey) || gkey.StartsWith("<") || gkey.Contains("YOUR_");
-    }
-
-    @if (isPlaceholder)
-    {
-        <div class="container mt-3">
-            <div class="alert alert-danger">
-                <strong>Google Maps key missing or invalid.</strong>
-                <div>Set your Google Maps API key in appsettings.Development.json (Google:ApiKey) or via user-secrets / environment variables. The map will not load until a valid key is provided.</div>
-            </div>
-        </div>
-        <script>console.error('Google Maps API key missing or placeholder - map scripts were not loaded.');</script>
     }
 
     <script>
+        // Esta função É OBRIGATÓRIA para o Google Maps
+        window.initMap = function() {
+            console.log("Google Maps carregado e initMap chamado!");
+            
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 12,
+                center: { lat: 38.7223, lng: -9.1393 } // Lisboa
+            });
+
+            // Chama a função que vais ter no teu barbershops-map.js
+            if (typeof loadBarbershops === 'function') {
+                loadBarbershops(map);
+            } else {
+                console.error("A função loadBarbershops não foi encontrada no barbershops-map.js!");
+            }
+        };
+
         (function() {
-            // gkey was rendered server-side into the page
             var renderedKey = '@gkey';
-            if (!renderedKey || renderedKey.startsWith('<') || renderedKey.indexOf('YOUR_') !== -1) {
-                console.error('Google Maps API key missing or placeholder - external scripts not loaded.');
+            if (!renderedKey || renderedKey.includes('YOUR_')) {
+                console.error('Chave de API inválida.');
                 return;
             }
 
-            // Load our application JS first so it can define initMap, then load Google Maps with callback=initMap.
-            var appScript = document.createElement('script');
-            appScript.src = '/js/barbershops-map.js';
-            appScript.defer = true;
-            appScript.onload = function() {
-                var mapsScript = document.createElement('script');
-                mapsScript.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(renderedKey) + '&libraries=places,geometry&language=pt&callback=initMap';
-                mapsScript.async = true;
-                mapsScript.defer = true;
-                document.head.appendChild(mapsScript);
-            };
-            document.head.appendChild(appScript);
+            // Injeta o script do Google Maps com a callback=initMap
+            var script = document.createElement('script');
+            script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(renderedKey) + '&callback=initMap';
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
         })();
     </script>
+    
+    <script src="~/js/barbershops-map.js"></script>
 }
