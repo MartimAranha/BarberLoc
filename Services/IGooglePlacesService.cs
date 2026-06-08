@@ -27,6 +27,16 @@ namespace WebApplication1.Services
         /// <param name="placeId">The Google Places placeId string (e.g. "ChIJ...").</param>
         /// <returns>A <see cref="PlaceDetailsResult"/> or null if placeId is empty.</returns>
         Task<PlaceDetailsResult?> GetFullPlaceDetailsAsync(string placeId);
+
+        /// <summary>
+        /// Searches for barbershops near the given coordinates using the Google Places Nearby Search API.
+        /// Falls back to an empty list when the API key is unavailable — the map will then show only seeded records.
+        /// </summary>
+        /// <param name="lat">Centre latitude.</param>
+        /// <param name="lng">Centre longitude.</param>
+        /// <param name="radiusMeters">Search radius in metres (max 50000).</param>
+        /// <returns>A list of <see cref="Models.ViewModels.BarberShopPlaceViewModel"/> ready for map rendering.</returns>
+        Task<IEnumerable<Models.ViewModels.BarberShopPlaceViewModel>> SearchNearbyBarbershopsAsync(double lat, double lng, int radiusMeters);
     }
 
     /// <summary>

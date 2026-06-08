@@ -18,6 +18,9 @@ namespace WebApplication1.Data
         public DbSet<CachedGoogleReview> CachedGoogleReviews { get; set; }
         public DbSet<FavouritePlace> FavouritePlaces { get; set; }
         
+        /// <summary>Cache table for barbershop data sourced from the Google Places API.</summary>
+        public DbSet<BarberShopPlace> BarberShopPlaces { get; set; }
+        
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -67,6 +70,11 @@ namespace WebApplication1.Data
             // Prevent duplicate favourites per user
             builder.Entity<FavouritePlace>()
                 .HasIndex(f => new { f.UserId, f.PlaceId })
+                .IsUnique();
+
+            // BarberShopPlace — unique PlaceId (one cache row per Google place)
+            builder.Entity<BarberShopPlace>()
+                .HasIndex(b => b.PlaceId)
                 .IsUnique();
         }
     }

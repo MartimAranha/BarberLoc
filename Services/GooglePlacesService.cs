@@ -482,5 +482,108 @@ namespace WebApplication1.Services
                 IsMockData = true
             };
         }
+
+        // ─── SearchNearbyBarbershopsAsync ──────────────────────────────────────────
+
+        /// <inheritdoc />
+        public async Task<IEnumerable<Models.ViewModels.BarberShopPlaceViewModel>> SearchNearbyBarbershopsAsync(
+            double lat, double lng, int radiusMeters)
+        {
+            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                _logger.LogInformation("[GooglePlacesService] No API key configured. SearchNearby returning empty list.");
+                return Enumerable.Empty<Models.ViewModels.BarberShopPlaceViewModel>();
+            }
+
+            var cacheKey = $"nearby_{lat:F4}_{lng:F4}_{radiusMeters}";
+            if (_memoryCache.TryGetValue(cacheKey, out IEnumerable<Models.ViewModels.BarberShopPlaceViewModel>? cached) && cached != null)
+                return cached;
+
+            try
+            {
+                var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json" +
+                          $"?location={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
+                          $"&radius={radiusMeters}" +
+                          "&type=hair_care" +
+                          "&language=pt" +
+                          $"&key={apiKey}";
+
+                _httpClient.Timeout = TimeSpan.FromSeconds(10);
+                var response = await _httpClient.GetAsync(url);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("[GooglePlacesService] NearbySearch returned {Status}.", response.StatusCode);
+                    return Enumerable.Empty<Models.ViewModels.BarberShopPlaceViewModel>();
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var results = ParseNearbySearchResponse(json, apiKey);
+
+                _memoryCache.Set(cacheKey, results, TimeSpan.FromMinutes(10));
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[GooglePlacesService] NearbySearch failed for ({Lat},{Lng}).", lat, lng);
+                return Enumerable.Empty<Models.ViewModels.BarberShopPlaceViewModel>();
+            }
+        }
+
+        private static IEnumerable<Models.ViewModels.BarberShopPlaceViewModel> ParseNearbySearchResponse(string json, string apiKey)
+        {
+            var results = new List<Models.ViewModels.BarberShopPlaceViewModel>();
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("results", out var items))
+                    return results;
+
+                foreach (var item in items.EnumerateArray().Take(50))
+                {
+                    var placeId = item.TryGetProperty("place_id", out var pid) ? pid.GetString() ?? string.Empty : string.Empty;
+                    if (string.IsNullOrEmpty(placeId)) continue;
+
+                    double? lat = null, lng = null;
+                    if (item.TryGetProperty("geometry", out var geo) &&
+                        geo.TryGetProperty("location", out var loc))
+                    {
+                        lat = loc.TryGetProperty("lat", out var latEl) ? latEl.GetDouble() : null;
+                        lng = loc.TryGetProperty("lng", out var lngEl) ? lngEl.GetDouble() : null;
+                    }
+
+                    if (lat == null || lng == null) continue;
+
+                    string? photoRef = null;
+                    if (item.TryGetProperty("photos", out var photos) &&
+                        photos.GetArrayLength() > 0 &&
+                        photos[0].TryGetProperty("photo_reference", out var pr))
+                    {
+                        photoRef = pr.GetString();
+                    }
+
+                    results.Add(new Models.ViewModels.BarberShopPlaceViewModel
+                    {
+                        PlaceId = placeId,
+                        Name = item.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
+                        Address = item.TryGetProperty("vicinity", out var vic) ? vic.GetString() : null,
+                        Rating = item.TryGetProperty("rating", out var rat) ? rat.GetDouble() : null,
+                        UserRatingsTotal = item.TryGetProperty("user_ratings_total", out var urt) ? urt.GetInt32() : null,
+                        Lat = lat.Value,
+                        Lng = lng.Value,
+                        PhotoReference = photoRef
+                    });
+                }
+            }
+            catch (Exception)
+            {
+                // Malformed response — return whatever was parsed so far
+            }
+
+            return results;
+        }
     }
 }

@@ -1,0 +1,567 @@
+@model WebApplication1.Models.ViewModels.MapPageViewModel
+
+@{
+    ViewData["Title"] = "Mapa Interativo de Barbearias";
+    var hasApiKey = !string.IsNullOrWhiteSpace(Model.GoogleMapsApiKey);
+}
+
+<meta name="description" content="Encontre as melhores barbearias e salões de beleza em Lisboa e Portugal no mapa interativo BarberLoc. Veja avaliações, horários e detalhes." />
+
+@Html.AntiForgeryToken()
+
+<style>
+    /* ── Map page layout ──────────────────────────────────────────────────── */
+    #map-page-wrapper {
+        position: relative;
+        height: calc(100vh - 60px);
+        min-height: 480px;
+        overflow: hidden;
+        background: #0f1117;
+    }
+
+    #map {
+        height: 100%;
+        width: 100%;
+        z-index: 1;
+    }
+
+    /* ── Filter sidebar ───────────────────────────────────────────────────── */
+    #filter-sidebar {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 800;
+        width: 290px;
+        max-height: calc(100% - 28px);
+        overflow-y: auto;
+        border-radius: 1.1rem;
+        box-shadow: 0 8px 32px rgba(0,0,0,.30);
+        background: rgba(255,255,255,.97);
+        backdrop-filter: blur(12px);
+        transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    }
+
+    #filter-sidebar.collapsed-sidebar {
+        transform: translateX(calc(-100% - 20px));
+    }
+
+    /* Toggle button */
+    #toggle-sidebar-btn {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 801;
+        border-radius: 0.75rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,.25);
+        background: #fff;
+        border: none;
+        padding: 0.45rem 0.85rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #343a40;
+        transition: left 0.28s cubic-bezier(.4,0,.2,1), box-shadow 0.2s;
+        display: none;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+    }
+
+    #toggle-sidebar-btn.visible {
+        display: flex;
+    }
+
+    /* ── Loading overlay ──────────────────────────────────────────────────── */
+    #map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 900;
+        background: rgba(255,255,255,.94);
+        backdrop-filter: blur(10px);
+        border-radius: 1rem;
+        padding: 1.5rem 2rem;
+        box-shadow: 0 4px 24px rgba(0,0,0,.18);
+    }
+
+    /* ── API key warning ──────────────────────────────────────────────────── */
+    #api-key-warning {
+        position: absolute;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 800;
+        width: min(500px, calc(100vw - 28px));
+    }
+
+    /* ── Category legend dot ──────────────────────────────────────────────── */
+    .legend-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 5px;
+        flex-shrink: 0;
+    }
+
+    /* ── Leaflet custom DivIcon marker ───────────────────────────────────── */
+    .bl-marker {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'Outfit', system-ui, sans-serif;
+        color: #fff;
+        border: 2.5px solid rgba(255,255,255,.85);
+        box-shadow: 0 3px 10px rgba(0,0,0,.35);
+        cursor: pointer;
+        transition: transform .15s ease, box-shadow .15s ease;
+        user-select: none;
+    }
+
+    .bl-marker:hover {
+        transform: scale(1.18);
+        box-shadow: 0 5px 18px rgba(0,0,0,.45);
+    }
+
+    .bl-marker.active-marker {
+        transform: scale(1.28);
+        border-color: #fff;
+        box-shadow: 0 0 0 3px rgba(255,255,255,.55), 0 6px 20px rgba(0,0,0,.5);
+    }
+
+    /* ── Responsive ───────────────────────────────────────────────────────── */
+    @@media (max-width: 767.98px) {
+        #map-page-wrapper { height: calc(100svh - 56px); }
+
+        #filter-sidebar {
+            width: calc(100vw - 24px);
+            max-height: 44vh;
+            top: auto;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+        }
+
+        #filter-sidebar.collapsed-sidebar {
+            transform: translateY(calc(100% + 20px));
+        }
+
+        #toggle-sidebar-btn {
+            top: auto;
+            bottom: 12px;
+            left: auto;
+            right: 12px;
+        }
+    }
+</style>
+
+@* ── Leaflet CSS (loaded before the map container renders) ── *@
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+<div id="map-page-wrapper">
+
+    @* Leaflet map canvas *@
+    <div id="map" role="application" aria-label="Mapa interativo de barbearias"></div>
+
+    @* Loading spinner (auto-hidden after tiles load) *@
+    <div id="map-loading" class="text-center">
+        <div class="spinner-border text-primary mb-2" role="status" style="width:2.5rem;height:2.5rem;">
+            <span class="visually-hidden">A carregar mapa...</span>
+        </div>
+        <p class="mb-0 small text-muted fw-medium">A carregar barbearias...</p>
+    </div>
+
+    @* No-API-key informational banner (shown only when PlacesApiKey is blank) *@
+    @if (!hasApiKey)
+    {
+        <div id="api-key-warning">
+            <div class="alert alert-info alert-dismissible fade show shadow-sm mb-0 small" role="alert">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Modo demonstração.</strong>
+                Configure <code>Google:PlacesApiKey</code> em <code>appsettings.json</code>
+                para activar avaliações e fotos ao vivo. Os marcadores do mapa exibem dados de seed locais.
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
+            </div>
+        </div>
+    }
+
+    @* Toggle button — shown when the sidebar is collapsed *@
+    <button id="toggle-sidebar-btn" title="Mostrar Filtros" aria-label="Mostrar filtros">
+        <i class="fas fa-sliders-h"></i>&nbsp;Filtros
+    </button>
+
+    @* ── Filter sidebar ────────────────────────────────────────────────────── *@
+    <div id="filter-sidebar" class="p-3">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0 d-flex align-items-center gap-2">
+                <i class="fas fa-sliders-h text-primary"></i>Filtrar
+            </h6>
+            <button class="btn btn-sm btn-light p-1 px-2" id="btn-collapse-sidebar" aria-label="Fechar painel">
+                <i class="fas fa-times small"></i>
+            </button>
+        </div>
+
+        @* Rating filter *@
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted text-uppercase" style="letter-spacing:.04em;">
+                Avaliação Mínima
+            </label>
+            <div class="d-flex flex-wrap gap-1">
+                <button class="btn btn-sm btn-outline-warning filter-btn active"
+                        data-filter="minRating" data-value="" id="filter-rating-any">Qualquer</button>
+                <button class="btn btn-sm btn-outline-warning filter-btn"
+                        data-filter="minRating" data-value="4" id="filter-rating-4">
+                    4+ <i class="fas fa-star fa-xs"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning filter-btn"
+                        data-filter="minRating" data-value="4.5" id="filter-rating-45">
+                    4.5+ <i class="fas fa-star fa-xs"></i>
+                </button>
+            </div>
+        </div>
+
+        @* Category filter *@
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted text-uppercase" style="letter-spacing:.04em;">
+                Categoria
+            </label>
+            <div class="d-flex flex-wrap gap-1">
+                <button class="btn btn-sm btn-outline-secondary filter-btn active"
+                        data-filter="category" data-value="" id="filter-cat-all">Todas</button>
+                <button class="btn btn-sm filter-btn" data-filter="category" data-value="Barbershop"
+                        id="filter-cat-barber"
+                        style="background:rgba(59,91,219,.1);border-color:#3b5bdb;color:#3b5bdb;">
+                    <span class="legend-dot" style="background:#3b5bdb;"></span>Barbearia
+                </button>
+                <button class="btn btn-sm filter-btn" data-filter="category" data-value="HairSalon"
+                        id="filter-cat-salon"
+                        style="background:rgba(214,51,108,.1);border-color:#d6336c;color:#d6336c;">
+                    <span class="legend-dot" style="background:#d6336c;"></span>Cabeleireiro
+                </button>
+                <button class="btn btn-sm filter-btn" data-filter="category" data-value="Unisex"
+                        id="filter-cat-unisex"
+                        style="background:rgba(12,166,120,.1);border-color:#0ca678;color:#0ca678;">
+                    <span class="legend-dot" style="background:#0ca678;"></span>Unisexo
+                </button>
+            </div>
+        </div>
+
+        <hr class="my-2">
+
+        @* Colour legend *@
+        <div class="mb-3">
+            <p class="small text-muted fw-semibold mb-2 text-uppercase" style="letter-spacing:.04em;">Legenda</p>
+            <div class="d-flex flex-column gap-1 small">
+                <div class="d-flex align-items-center">
+                    <span class="legend-dot" style="background:#3b5bdb;"></span>Barbearia
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="legend-dot" style="background:#d6336c;"></span>Cabeleireiro
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="legend-dot" style="background:#0ca678;"></span>Unisexo
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="legend-dot" style="background:#495057;"></span>Outro
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-2">
+
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted fw-medium" id="results-count">— resultados</small>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">
+                <i class="fas fa-undo me-1"></i>Limpar
+            </button>
+        </div>
+
+    </div>
+</div>
+
+@* ── Place detail offcanvas panel (shared partial) ─────────────────────────── *@
+@await Html.PartialAsync("~/Views/Barbershops/_PlaceDetailPanel.cshtml")
+
+@section Scripts {
+
+    @* Leaflet JS — must load before the inline init script below *@
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    @*
+        barbershops-map.js must load BEFORE the inline script so its exported globals
+        (populatePanel, setPanelState, setTextField, renderStars, setupFavouriteButton)
+        are available when marker-click handlers call them.
+    *@
+    <script src="~/js/barbershops-map.js" asp-append-version="true"></script>
+
+    <script>
+    // ── Server-serialised BarberShopPlace seed data ──────────────────────────
+    // Provides marker positions without an extra round-trip on initial load.
+    // Full details are fetched lazily via /Map/Details on marker click.
+    const mapShops = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.NearbyShops,
+        new System.Text.Json.JsonSerializerOptions {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        }
+    ));
+
+    // ── Global config (read by barbershops-map.js utility functions) ─────────
+    window.BarberLocConfig = {
+        isAuthenticated: @(User.Identity?.IsAuthenticated == true ? "true" : "false"),
+        antiForgeryToken: document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '',
+        defaultLat: @Model.DefaultLatitude.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        defaultLng: @Model.DefaultLongitude.ToString(System.Globalization.CultureInfo.InvariantCulture)
+    };
+
+    // ── Module-scope map state ────────────────────────────────────────────────
+    let leafletMap         = null;
+    let leafletMarkers     = [];
+    let allMapShops        = [...mapShops];
+    let activeMapFilters   = { category: '', minRating: '' };
+    let mapOffcanvasInst   = null;
+    let activeLeafletMarker = null;
+    let currentMapPlaceId  = null;  // kept in sync for the favourite-button handler
+
+    // ── Category → marker colour map ─────────────────────────────────────────
+    const markerColours = {
+        Barbershop: '#3b5bdb',
+        HairSalon:  '#d6336c',
+        Unisex:     '#0ca678',
+        default:    '#495057'
+    };
+
+    // ────────────────────────────────────────────────────────────────────────
+    // DOMContentLoaded: bootstrap offcanvas + map init
+    // ────────────────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        // Init Bootstrap Offcanvas panel
+        const panelEl = document.getElementById('placeDetailPanel');
+        if (panelEl && typeof bootstrap !== 'undefined') {
+            mapOffcanvasInst = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+        }
+
+        initLeafletMap();
+        wireFilterPanel();
+    });
+
+    // ── Leaflet map setup ────────────────────────────────────────────────────
+    function initLeafletMap() {
+        const lat = window.BarberLocConfig.defaultLat;
+        const lng = window.BarberLocConfig.defaultLng;
+
+        leafletMap = L.map('map', {
+            center: [lat, lng],
+            zoom: 12,
+            zoomControl: false   // we add it at bottom-right
+        });
+
+        L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
+
+        // OpenStreetMap tiles (free, no API key required)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(leafletMap);
+
+        // Hide loader once the map fires its first 'load' event
+        leafletMap.once('load', function () {
+            document.getElementById('map-loading')?.classList.add('d-none');
+        });
+        // Belt-and-suspenders: hide loader after 3 s regardless
+        setTimeout(function () {
+            document.getElementById('map-loading')?.classList.add('d-none');
+        }, 3000);
+
+        renderLeafletMarkers(allMapShops);
+    }
+
+    // ── Build a Leaflet DivIcon for a shop ───────────────────────────────────
+    function buildLeafletIcon(shop) {
+        const colour = markerColours[shop.category] || markerColours.default;
+        // Rating label on marker (e.g. "4.8") or fallback star
+        const label  = shop.rating ? Number(shop.rating).toFixed(1) : '★';
+
+        return L.divIcon({
+            className: '',          // suppress default leaflet-div-icon styling
+            iconSize:  [36, 36],
+            iconAnchor:[18, 18],
+            popupAnchor: [0, -20],
+            html: `<div class="bl-marker" style="background:${colour};" aria-label="${escHtml(shop.name)}">${escHtml(label)}</div>`
+        });
+    }
+
+    // ── Render / re-render all markers ───────────────────────────────────────
+    function renderLeafletMarkers(shops) {
+        leafletMarkers.forEach(function (m) { m.remove(); });
+        leafletMarkers  = [];
+        activeLeafletMarker = null;
+
+        shops.forEach(function (shop) {
+            if (!shop.lat || !shop.lng) return;
+
+            const marker = L.marker([shop.lat, shop.lng], {
+                icon: buildLeafletIcon(shop),
+                title: shop.name,
+                riseOnHover: true
+            }).addTo(leafletMap);
+
+            marker._shopData = shop;
+            marker.on('click', function () { handleLeafletMarkerClick(this); });
+            leafletMarkers.push(marker);
+        });
+
+        updateResultsCount(shops.length);
+    }
+
+    // ── Marker click handler ─────────────────────────────────────────────────
+    async function handleLeafletMarkerClick(marker) {
+        // Highlight clicked marker; de-highlight previous
+        if (activeLeafletMarker && activeLeafletMarker !== marker) {
+            const prevDiv = activeLeafletMarker.getElement()?.querySelector('.bl-marker');
+            if (prevDiv) prevDiv.classList.remove('active-marker');
+        }
+        const markerDiv = marker.getElement()?.querySelector('.bl-marker');
+        if (markerDiv) markerDiv.classList.add('active-marker');
+        activeLeafletMarker = marker;
+
+        // Lazy-init offcanvas (handles the rare case DOMContentLoaded already fired)
+        if (!mapOffcanvasInst) {
+            const panelEl = document.getElementById('placeDetailPanel');
+            if (panelEl && typeof bootstrap !== 'undefined') {
+                mapOffcanvasInst = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+            }
+            if (!mapOffcanvasInst) return;
+        }
+
+        const shop = marker._shopData;
+
+        // Sync currentMapPlaceId for the favourite button handler in barbershops-map.js
+        currentMapPlaceId = shop.placeId || null;
+
+        // Show panel immediately (loading state) for perceived performance
+        setPanelState('loading');
+        mapOffcanvasInst.show();
+        setTextField('name', shop.name || 'Barbearia');
+
+        if (!shop.placeId) {
+            // No Google PlaceId — render with locally-available data only
+            fillBasicFromMapShop(shop);
+            setPanelState('content');
+            return;
+        }
+
+        try {
+            // /Map/Details is the MapController AJAX endpoint for placeId-based lookups
+            const resp = await fetch(`/Map/Details?placeId=${encodeURIComponent(shop.placeId)}`);
+            if (!resp.ok) { setPanelState('error'); return; }
+
+            const data = await resp.json();
+            if (!data.success) { setPanelState('error'); return; }
+
+            // populatePanel is defined in barbershops-map.js (loaded above this script)
+            populatePanel(data);
+            setPanelState('content');
+        } catch (err) {
+            console.error('[BarberLoc Map] Fetch error for placeId', shop.placeId, err);
+            setPanelState('error');
+        }
+    }
+
+    // ── Fill panel from local shop data (no API call) ────────────────────────
+    function fillBasicFromMapShop(shop) {
+        setTextField('name', shop.name || '—');
+        setTextField('address', shop.address || '—');
+        setTextField('rating', shop.rating ? Number(shop.rating).toFixed(1) : '—');
+        renderStars('panel-stars', shop.rating);
+        setTextField('ratings-total', shop.userRatingsTotal
+            ? `(${Number(shop.userRatingsTotal).toLocaleString('pt-PT')} avaliações)` : '');
+
+        ['open-badge','phone-row','website-row','hours-section','reviews-section',
+         'photo-carousel-wrapper','mock-badge','btn-favourite'].forEach(function (id) {
+            document.getElementById(id)?.classList.add('d-none');
+        });
+        document.getElementById('photo-placeholder')?.classList.remove('d-none');
+
+        const mapsBtn = document.getElementById('btn-google-maps');
+        if (mapsBtn) {
+            mapsBtn.href = `https://maps.google.com/?q=${encodeURIComponent(shop.address || shop.name || '')}`;
+        }
+    }
+
+    // ── Filter panel wiring ──────────────────────────────────────────────────
+    function wireFilterPanel() {
+        document.querySelectorAll('.filter-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const filter = btn.dataset.filter;
+                document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`)
+                    .forEach(function (b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+
+                if (filter === 'minRating') activeMapFilters.minRating = btn.dataset.value;
+                else                        activeMapFilters.category  = btn.dataset.value;
+
+                applyMapFilters();
+            });
+        });
+
+        document.getElementById('btn-reset-filters')?.addEventListener('click', function () {
+            activeMapFilters = { category: '', minRating: '' };
+            document.querySelectorAll('.filter-btn').forEach(function (b) {
+                b.classList.toggle('active', b.dataset.value === '');
+            });
+            applyMapFilters();
+        });
+
+        // Collapse / show sidebar
+        const sidebar     = document.getElementById('filter-sidebar');
+        const toggleBtn   = document.getElementById('toggle-sidebar-btn');
+        const collapseBtn = document.getElementById('btn-collapse-sidebar');
+
+        collapseBtn?.addEventListener('click', function () {
+            sidebar.classList.add('collapsed-sidebar');
+            toggleBtn.classList.add('visible');
+        });
+
+        toggleBtn?.addEventListener('click', function () {
+            sidebar.classList.remove('collapsed-sidebar');
+            toggleBtn.classList.remove('visible');
+        });
+    }
+
+    // ── Client-side filter application ───────────────────────────────────────
+    function applyMapFilters() {
+        const filtered = allMapShops.filter(function (s) {
+            if (activeMapFilters.category  && s.category  !== activeMapFilters.category)               return false;
+            if (activeMapFilters.minRating && (s.rating ?? 0) < parseFloat(activeMapFilters.minRating)) return false;
+            return true;
+        });
+        renderLeafletMarkers(filtered);
+    }
+
+    // ── Local utilities ───────────────────────────────────────────────────────
+    function updateResultsCount(count) {
+        const el = document.getElementById('results-count');
+        if (el) el.textContent = `${count} resultado${count !== 1 ? 's' : ''}`;
+    }
+
+    // escHtml is also defined in barbershops-map.js but we keep a local copy
+    // to avoid ordering dependencies in the rare case the script loads late.
+    function escHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g,  '&amp;')
+            .replace(/</g,  '&lt;')
+            .replace(/>/g,  '&gt;')
+            .replace(/"/g,  '&quot;')
+            .replace(/'/g,  '&#039;');
+    }
+    </script>
+}

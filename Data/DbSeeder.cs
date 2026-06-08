@@ -117,6 +117,108 @@ namespace WebApplication1.Data
 
             // ── Seed FavouritePlaces ─────────────────────────────────────────────
             await SeedFavouritePlacesAsync(context, sampleUser);
+
+            // ── Seed BarberShopPlaces (Google Places cache / map markers) ──────────
+            await SeedBarberShopPlacesAsync(context);
+        }
+
+        // ── Seed BarberShopPlaces (Google Places cache table / map markers) ──────────
+
+        private static async Task SeedBarberShopPlacesAsync(ApplicationDbContext context)
+        {
+            // Idempotent — only seed if the table is empty
+            if (await context.BarberShopPlaces.AnyAsync()) return;
+
+            // Opening hours JSON shared by Lisbon city-centre barbershops
+            var weekdayHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                "Segunda-feira: 09:00 – 20:00",
+                "Terça-feira: 09:00 – 20:00",
+                "Quarta-feira: 09:00 – 20:00",
+                "Quinta-feira: 09:00 – 20:00",
+                "Sexta-feira: 09:00 – 20:00",
+                "Sábado: 09:00 – 18:00",
+                "Domingo: Fechado"
+            });
+
+            var eleganceHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                "Segunda-feira: Fechado",
+                "Terça-feira: 10:00 – 19:00",
+                "Quarta-feira: 10:00 – 19:00",
+                "Quinta-feira: 10:00 – 19:00",
+                "Sexta-feira: 10:00 – 19:00",
+                "Sábado: 10:00 – 18:00",
+                "Domingo: 10:00 – 14:00"
+            });
+
+            var urbanHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                "Segunda-feira: 09:00 – 21:00",
+                "Terça-feira: 09:00 – 21:00",
+                "Quarta-feira: 09:00 – 21:00",
+                "Quinta-feira: 09:00 – 21:00",
+                "Sexta-feira: 09:00 – 21:00",
+                "Sábado: 09:00 – 21:00",
+                "Domingo: Fechado"
+            });
+
+            context.BarberShopPlaces.AddRange(new[]
+            {
+                // ── Record 1: Barbearia Clássica Lisboa ──────────────────────────────
+                // Matches PlaceId used in Barbershops seed and FavouritePlaces seed.
+                new BarberShopPlace
+                {
+                    PlaceId = "ChIJBarbershopMockLisboa001",
+                    Name = "Barbearia Clássica Lisboa",
+                    Address = "Rua Augusta 120, 1100-053 Lisboa",
+                    PhoneNumber = "+351 21 000 1111",
+                    Website = "https://www.barberloc.pt",
+                    Rating = 4.8,
+                    UserRatingsTotal = 214,
+                    Latitude = 38.7100,
+                    Longitude = -9.1380,
+                    OpeningHoursJson = weekdayHoursJson,
+                    PhotoReference = null, // no photo reference without live API
+                    LastFetchedAt = DateTime.UtcNow
+                },
+
+                // ── Record 2: Salão Elegance Cascais ───────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId = "ChIJHairSalonMockCascais002",
+                    Name = "Salão Elegance Cascais",
+                    Address = "Av. Marginal 55, 2750-341 Cascais",
+                    PhoneNumber = "+351 21 000 2222",
+                    Website = "https://www.elegancecascais.pt",
+                    Rating = 4.6,
+                    UserRatingsTotal = 87,
+                    Latitude = 38.6968,
+                    Longitude = -9.4207,
+                    OpeningHoursJson = eleganceHoursJson,
+                    PhotoReference = null,
+                    LastFetchedAt = DateTime.UtcNow
+                },
+
+                // ── Record 3: UrbanCuts Porto ─────────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId = "ChIJBarbershopMockPorto003",
+                    Name = "UrbanCuts Porto",
+                    Address = "Rua de Santa Catarina 300, 4000-447 Porto",
+                    PhoneNumber = "+351 22 000 3333",
+                    Website = "https://www.urbancutsporto.pt",
+                    Rating = 4.5,
+                    UserRatingsTotal = 163,
+                    Latitude = 41.1496,
+                    Longitude = -8.6109,
+                    OpeningHoursJson = urbanHoursJson,
+                    PhotoReference = null,
+                    LastFetchedAt = DateTime.UtcNow
+                }
+            });
+
+            await context.SaveChangesAsync();
         }
 
         // ── Seed FavouritePlaces for the sample user ─────────────────────────────

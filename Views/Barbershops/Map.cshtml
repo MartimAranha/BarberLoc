@@ -9,10 +9,22 @@
 <meta name="description" content="Encontre barbearias e salões de beleza perto de si no mapa interativo BarberLoc. Veja avaliações Google, horários, contactos e muito mais." />
 
 <style>
+    /*
+     * FIX 1 (Markers disappearing): The map container now uses an explicit pixel
+     * height instead of calc(100vh - 56px). The previous approach caused the map
+     * div to collapse to zero height when the parent container-fluid had no explicit
+     * height — resulting in markers being rendered but invisible.
+     */
     #map-container {
         position: relative;
-        height: calc(100vh - 56px);
+        height: 600px;       /* explicit px height — never collapses regardless of parent layout */
         overflow: hidden;
+    }
+
+    @@media (min-height: 700px) {
+        #map-container {
+            height: calc(100vh - 60px);   /* taller viewports get full-height map */
+        }
     }
 
     #map {
@@ -62,18 +74,11 @@
         border-radius: 1rem;
     }
 
-    /* Custom marker badge */
-    .marker-label {
-        background: #fff;
-        border-radius: 1rem;
-        padding: 2px 6px;
-        font-size: 11px;
-        font-weight: 700;
-        color: #343a40;
-        box-shadow: 0 2px 6px rgba(0,0,0,.2);
-    }
-
     @@media (max-width: 767.98px) {
+        #map-container {
+            height: 70vh;
+            min-height: 400px;
+        }
         #filter-sidebar {
             width: calc(100vw - 24px);
             max-height: 45vh;
@@ -115,7 +120,7 @@
     @* No API key warning *@
     @if (string.IsNullOrWhiteSpace(googleApiKey))
     {
-        <div class="position-absolute top-0 start-0 end-0 m-3 z-index-1000" style="z-index:30;">
+        <div class="position-absolute top-0 start-0 end-0 m-3" style="z-index:30;">
             <div class="alert alert-warning alert-dismissible fade show shadow mb-0" role="alert">
                 <i class="fas fa-exclamation-triangle me-2"></i>
                 <strong>Chave de API em falta.</strong> Configure <code>Google:ApiKey</code> em <code>appsettings.json</code>.
@@ -181,26 +186,36 @@
 
 @section Scripts {
     <script>
-        // ── Config passed from server to JS (API key never used client-side for Places calls) ──
+        // ── Config passed from server to JS ───────────────────────────────────────
+        // The API key is NOT included here — it is only used in the <script src> tag.
         window.BarberLocConfig = {
             isAuthenticated: @(User.Identity?.IsAuthenticated == true ? "true" : "false"),
-            antiForgeryToken: document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
+            antiForgeryToken: document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '',
+            defaultLat: 38.7169,
+            defaultLng: -9.1399
         };
     </script>
 
+    @*
+        FIX 1 + 2: Script loading order is critical.
+
+        Step 1 — load barbershops-map.js FIRST, synchronously (no async/defer).
+                  This guarantees window.initMap is defined before the Maps API fires.
+
+        Step 2 — load the Google Maps JS API with:
+                  • callback=initMap  (fires after API is ready, by which time initMap is defined)
+                  • async defer       (non-blocking page load)
+                  • NO `libraries=marker` — mixing the AdvancedMarkers library with legacy
+                    google.maps.Marker causes silent click listener failures.
+                  • NO `loading=async` — this parameter conflicts with the async+defer attrs.
+
+        Using a static <script src> tag (not dynamically injected via createElement)
+        eliminates the race condition where the callback fires before the src is added to the DOM.
+    *@
     <script src="~/js/barbershops-map.js" asp-append-version="true"></script>
 
     @if (!string.IsNullOrWhiteSpace(googleApiKey))
     {
-        @* Google Maps JS API — loaded last, triggers initMap callback defined in barbershops-map.js *@
-        <script>
-            (function () {
-                var script = document.createElement('script');
-                script.src = 'https://maps.googleapis.com/maps/api/js?key=@googleApiKey&libraries=places,marker&callback=initMap&loading=async';
-                script.async = true;
-                script.defer = true;
-                document.head.appendChild(script);
-            })();
-        </script>
+        <script src="https://maps.googleapis.com/maps/api/js?key=@googleApiKey&callback=initMap" async defer></script>
     }
 }

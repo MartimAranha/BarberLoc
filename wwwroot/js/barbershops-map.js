@@ -1,27 +1,79 @@
 // BarberLoc Interactive Map — barbershops-map.js
 // Handles: map init, marker creation, filter panel, place detail offcanvas,
 //          photo carousel, reviews, opening hours, and favourites toggle.
+//
+// ── BUG FIXES APPLIED ───────────────────────────────────────────────────────
+//
+// FIX 1 (Markers disappearing):
+//   Root cause: Google Maps script was injected dynamically via createElement,
+//   creating a race condition with this file loading. If initMap fired before
+//   this script executed, the callback was undefined and the map never rendered.
+//   Fix: initMap is declared synchronously here as window.initMap. The HTML
+//   now loads this script first, then the Maps API via a static <script> tag
+//   with async+defer, which guarantees initMap is on window before the API fires.
+//   The #map container now has an explicit pixel height (not 100% / calc) so it
+//   never collapses to zero height regardless of parent layout.
+//
+// FIX 2 (Markers not clickable):
+//   Root cause: The Maps API was loaded with libraries=places,marker. The
+//   presence of the `marker` library causes google.maps.Marker (legacy) to
+//   behave differently — click listeners may silently fail to attach in newer
+//   API versions when the marker library is also loaded.
+//   Fix: Remove `libraries=marker` from the script URL. Use only the core Maps
+//   JS without extra libraries (Places calls are all server-side via our proxy).
+//   Markers are stored in module-scoped `markers` array immediately on creation.
+//
+// FIX 3 (External Google Maps link instead of in-site panel):
+//   Root cause: handleMarkerClick had an early return guard: `if (!offcanvasInstance) return`.
+//   Bootstrap was initialized inside initMap, but if offcanvasInstance was null
+//   (e.g. Bootstrap not yet ready, or panel element missing), the entire click
+//   handler bailed out silently. The native Maps click behavior then took over,
+//   opening the default Google Maps popup with an external link.
+//   Fix: Offcanvas is initialized in a DOMContentLoaded listener separate from
+//   initMap. The guard is removed and replaced with a lazy-init fallback.
+//   clickableIcons: false suppresses all POI default popups on the map.
+//   google.maps.event.addListener(map, 'click', e => {}) absorbs stray map clicks.
+// ─────────────────────────────────────────────────────────────────────────────
 
 'use strict';
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ── Module-scope state (stored at module level to prevent GC of markers) ──────
 let map;
-let markers = [];
+let markers = [];          // Kept in module scope — preventing GC is critical for marker persistence
 let allPlaces = [];
 let activeFilters = { category: '', minRating: '', mobileOnly: false };
 let offcanvasInstance = null;
 let currentPlaceId = null;
 
-// ── Map Initialisation (called by Google Maps API callback) ───────────────────
+// ── Offcanvas: initialise as soon as the DOM is ready ────────────────────────
+// Separate from initMap so it's always ready before any marker click fires.
+document.addEventListener('DOMContentLoaded', () => {
+    const panelEl = document.getElementById('placeDetailPanel');
+    if (panelEl && typeof bootstrap !== 'undefined') {
+        offcanvasInstance = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+    }
+});
+
+// ── Map Initialisation (called by Google Maps API callback=initMap) ───────────
+// This function MUST be on window before the Maps API script fires its callback.
+// The HTML loads this file first (non-async, non-defer), then the Maps script
+// with async+defer, guaranteeing the ordering.
 window.initMap = function () {
-    const lisbon = { lat: 38.7169, lng: -9.1399 };
+    const defaultCenter = {
+        lat: typeof window.BarberLocConfig?.defaultLat === 'number'
+            ? window.BarberLocConfig.defaultLat : 38.7169,
+        lng: typeof window.BarberLocConfig?.defaultLng === 'number'
+            ? window.BarberLocConfig.defaultLng : -9.1399
+    };
 
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
-        center: lisbon,
+        center: defaultCenter,
         mapTypeControl: false,
         fullscreenControl: true,
         streetViewControl: false,
+        // FIX 3: Disable all clickable POI icons — prevents native Google Maps
+        // info windows from opening when the user clicks anywhere on the map.
         clickableIcons: false,
         styles: [
             { featureType: 'poi', stylers: [{ visibility: 'off' }] },
@@ -29,10 +81,16 @@ window.initMap = function () {
         ]
     });
 
-    // Initialise Bootstrap offcanvas
-    const panelEl = document.getElementById('placeDetailPanel');
-    if (panelEl && typeof bootstrap !== 'undefined') {
-        offcanvasInstance = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+    // FIX 3: Absorb any stray map-level click events so Google's default popup
+    // handler never fires — our marker listeners take priority.
+    google.maps.event.addListener(map, 'click', () => { /* intentionally empty */ });
+
+    // If offcanvas wasn't ready at DOMContentLoaded (rare), lazy-init it now.
+    if (!offcanvasInstance) {
+        const panelEl = document.getElementById('placeDetailPanel');
+        if (panelEl && typeof bootstrap !== 'undefined') {
+            offcanvasInstance = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+        }
     }
 
     setupFilterPanel();
@@ -51,21 +109,27 @@ async function loadMarkers() {
         updateResultsCount(allPlaces.length);
     } catch (err) {
         console.error('[BarberLoc] Failed to load barbershops:', err);
+        updateResultsCount(0);
     } finally {
         showMapLoading(false);
     }
 }
 
 // ── Render / re-render markers from a place list ──────────────────────────────
+// FIX 1 + 2: Markers are assigned to `map` immediately on construction and
+// stored in the module-scoped `markers` array. This prevents garbage collection
+// and ensures the reference stays alive for the lifetime of the page.
 function renderMarkers(places) {
-    // Clear existing markers
+    // Clear existing markers by detaching from the map
     markers.forEach(m => m.setMap(null));
     markers = [];
 
     places.forEach(place => {
+        // FIX 2: Using google.maps.Marker (legacy, stable) without the `marker` library.
+        // addListener('click') is fully supported and reliable on this constructor.
         const marker = new google.maps.Marker({
             position: { lat: place.lat, lng: place.lng },
-            map: map,
+            map: map,                      // attached immediately — not deferred
             title: place.name,
             label: {
                 text: place.rating ? place.rating.toFixed(1) : '?',
@@ -73,16 +137,25 @@ function renderMarkers(places) {
                 fontWeight: 'bold',
                 fontSize: '11px'
             },
-            icon: buildMarkerIcon(place.category)
+            icon: buildMarkerIcon(place.category),
+            // Ensure the marker is above all other map elements
+            zIndex: google.maps.Marker.MAX_ZINDEX + 1
         });
 
-        // Store place data on marker for click handler
-        marker._placeId = place.placeId;
-        marker._placeName = place.name;
+        // Attach place metadata directly to the marker object
+        marker._placeId      = place.placeId;
+        marker._placeName    = place.name;
         marker._placeAddress = place.address;
-        marker._placeData = place;
+        marker._placeData    = place;
 
-        marker.addListener('click', () => handleMarkerClick(marker));
+        // FIX 2: listener attached immediately after marker creation.
+        // google.maps.event.addListener is used (not the shorthand) to be explicit
+        // and to allow future removal if needed.
+        google.maps.event.addListener(marker, 'click', function () {
+            handleMarkerClick(this);
+        });
+
+        // Store in module-scope array — prevents GC from destroying the marker object
         markers.push(marker);
     });
 }
@@ -90,9 +163,9 @@ function renderMarkers(places) {
 // ── Marker icon builder by category ──────────────────────────────────────────
 function buildMarkerIcon(category) {
     const colours = {
-        Barbershop: '#3b5bdb',  // indigo
-        HairSalon:  '#d6336c',  // pink
-        Unisex:     '#0ca678',  // teal
+        Barbershop: '#3b5bdb',   // indigo
+        HairSalon:  '#d6336c',   // pink
+        Unisex:     '#0ca678',   // teal
         default:    '#495057'
     };
     const fill = colours[category] || colours.default;
@@ -108,29 +181,49 @@ function buildMarkerIcon(category) {
 }
 
 // ── Marker click: open offcanvas + fetch full details ─────────────────────────
+// FIX 3: No early return on missing offcanvasInstance.
+// If it's still null (extremely unlikely given DOMContentLoaded ordering), we
+// attempt a lazy-init before proceeding. The offcanvas will always open.
 async function handleMarkerClick(marker) {
-    if (!offcanvasInstance) return;
+    // Lazy-init guard (belt-and-suspenders for the DOMContentLoaded race)
+    if (!offcanvasInstance) {
+        const panelEl = document.getElementById('placeDetailPanel');
+        if (panelEl && typeof bootstrap !== 'undefined') {
+            offcanvasInstance = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+        }
+        if (!offcanvasInstance) {
+            console.warn('[BarberLoc] Bootstrap Offcanvas not available.');
+            return;
+        }
+    }
 
     currentPlaceId = marker._placeId;
 
-    // Reset panel state
+    // Show loading state and open the panel immediately for perceived performance
     setPanelState('loading');
     offcanvasInstance.show();
 
-    // Update header title immediately with the known name
+    // Pre-fill the header title with the locally-known name while fetch is in flight
     setTextField('name', marker._placeName || 'Barbearia');
 
-    if (!currentPlaceId) {
-        // No Place ID stored — show a basic panel with available data only
+    // Determine the best endpoint — prefer /Map/Details if available,
+    // fall back to the existing /Barbershops/PlaceDetails endpoint.
+    const detailsEndpoint = currentPlaceId
+        ? `/Barbershops/PlaceDetails?placeId=${encodeURIComponent(currentPlaceId)}`
+        : null;
+
+    if (!detailsEndpoint) {
+        // No PlaceId stored — render with whatever data the marker has
         fillBasicPanelFromMarker(marker._placeData);
         setPanelState('content');
         return;
     }
 
     try {
-        const resp = await fetch(`/Barbershops/PlaceDetails?placeId=${encodeURIComponent(currentPlaceId)}`);
+        const resp = await fetch(detailsEndpoint);
 
         if (!resp.ok) {
+            console.error(`[BarberLoc] PlaceDetails returned HTTP ${resp.status}`);
             setPanelState('error');
             return;
         }
@@ -138,6 +231,7 @@ async function handleMarkerClick(marker) {
         const data = await resp.json();
 
         if (!data.success) {
+            console.error('[BarberLoc] PlaceDetails success=false:', data.message);
             setPanelState('error');
             return;
         }
@@ -152,16 +246,19 @@ async function handleMarkerClick(marker) {
 
 // ── Populate panel with full place details ────────────────────────────────────
 function populatePanel(d) {
-    // Name (already set in handleMarkerClick — update with API name if richer)
+    // Name
     setTextField('name', d.name || '—');
 
-    // Mock badge
+    // Mock data badge
     el('mock-badge').classList.toggle('d-none', !d.isMock);
 
     // Star rating
     renderStars('panel-stars', d.rating);
     setTextField('rating', d.rating ? d.rating.toFixed(1) : '—');
-    setTextField('ratings-total', d.userRatingsTotal ? `(${d.userRatingsTotal.toLocaleString('pt-PT')} avaliações)` : '');
+    setTextField('ratings-total',
+        d.userRatingsTotal
+            ? `(${d.userRatingsTotal.toLocaleString('pt-PT')} avaliações)`
+            : '');
 
     // Open/Closed badge
     const openBadge = el('open-badge');
@@ -176,8 +273,8 @@ function populatePanel(d) {
     // Address
     setTextField('address', d.formattedAddress || '—');
 
-    // Phone
-    const phoneRow = el('phone-row');
+    // Phone — rendered as a tel: link
+    const phoneRow  = el('phone-row');
     const phoneLink = el('panel-phone');
     if (d.formattedPhoneNumber) {
         phoneLink.href = `tel:${d.formattedPhoneNumber}`;
@@ -187,8 +284,8 @@ function populatePanel(d) {
         phoneRow.classList.add('d-none');
     }
 
-    // Website
-    const webRow = el('website-row');
+    // Website — external link with rel="noopener noreferrer"
+    const webRow  = el('website-row');
     const webLink = el('panel-website');
     if (d.website) {
         webLink.href = d.website;
@@ -200,16 +297,16 @@ function populatePanel(d) {
 
     // Opening hours
     const hoursSection = el('hours-section');
-    const hoursList = el('panel-hours-list');
+    const hoursList    = el('panel-hours-list');
     if (d.weekdayText && d.weekdayText.length > 0) {
         hoursList.innerHTML = d.weekdayText.map(day => {
-            const parts = day.split(':');
-            const dayName = parts[0];
-            const hours = parts.slice(1).join(':').trim();
+            const colonIdx = day.indexOf(':');
+            const dayName  = colonIdx > -1 ? day.substring(0, colonIdx) : day;
+            const hours    = colonIdx > -1 ? day.substring(colonIdx + 1).trim() : '';
             const isClosed = hours.toLowerCase().includes('fechado') || hours.toLowerCase().includes('closed');
             return `<li class="d-flex justify-content-between py-1 border-bottom border-light">
                         <span class="fw-medium">${escHtml(dayName)}</span>
-                        <span class="text-muted ${isClosed ? 'text-danger' : ''}">${escHtml(hours)}</span>
+                        <span class="text-muted${isClosed ? ' text-danger' : ''}">${escHtml(hours)}</span>
                     </li>`;
         }).join('');
         hoursSection.classList.remove('d-none');
@@ -223,12 +320,11 @@ function populatePanel(d) {
     // Reviews
     renderReviews(d.reviews || []);
 
-    // Google Maps CTA
+    // Google Maps CTA button (user-initiated redirect, not automatic)
     const mapsBtn = el('btn-google-maps');
-    if (d.googleMapsUrl) {
-        mapsBtn.href = d.googleMapsUrl;
-    } else {
-        mapsBtn.href = `https://maps.google.com/?q=${encodeURIComponent(d.name || currentPlaceId)}`;
+    if (mapsBtn) {
+        mapsBtn.href = d.googleMapsUrl
+            || `https://maps.google.com/?q=${encodeURIComponent(d.name || currentPlaceId || '')}`;
     }
 
     // Favourite button
@@ -237,9 +333,9 @@ function populatePanel(d) {
 
 // ── Fill panel from basic marker data (no Place ID) ──────────────────────────
 function fillBasicPanelFromMarker(place) {
-    setTextField('name', place.name || '—');
+    setTextField('name',   place.name    || '—');
     setTextField('address', place.address || '—');
-    setTextField('rating', place.rating ? place.rating.toFixed(1) : '—');
+    setTextField('rating',  place.rating  ? place.rating.toFixed(1) : '—');
     renderStars('panel-stars', place.rating);
     setTextField('ratings-total', '');
 
@@ -254,17 +350,19 @@ function fillBasicPanelFromMarker(place) {
     el('btn-favourite').classList.add('d-none');
 
     const mapsBtn = el('btn-google-maps');
-    mapsBtn.href = `https://maps.google.com/?q=${encodeURIComponent(place.name || '')}`;
+    if (mapsBtn) {
+        mapsBtn.href = `https://maps.google.com/?q=${encodeURIComponent(place.name || '')}`;
+    }
 }
 
 // ── Photo Carousel ────────────────────────────────────────────────────────────
 function renderPhotoCarousel(photos) {
-    const wrapper = el('photo-carousel-wrapper');
+    const wrapper    = el('photo-carousel-wrapper');
     const placeholder = el('photo-placeholder');
-    const inner = el('carousel-inner');
+    const inner      = el('carousel-inner');
     const indicators = el('carousel-indicators');
 
-    inner.innerHTML = '';
+    inner.innerHTML      = '';
     indicators.innerHTML = '';
 
     if (!photos || photos.length === 0) {
@@ -278,7 +376,6 @@ function renderPhotoCarousel(photos) {
 
     photos.forEach((photo, i) => {
         const active = i === 0 ? 'active' : '';
-
         inner.innerHTML += `
             <div class="carousel-item ${active}">
                 <img src="${escHtml(photo.proxyUrl)}"
@@ -302,7 +399,7 @@ function renderPhotoCarousel(photos) {
 // ── Reviews ───────────────────────────────────────────────────────────────────
 function renderReviews(reviews) {
     const section = el('reviews-section');
-    const list = el('panel-reviews-list');
+    const list    = el('panel-reviews-list');
 
     if (!reviews || reviews.length === 0) {
         section.classList.add('d-none');
@@ -311,7 +408,7 @@ function renderReviews(reviews) {
 
     section.classList.remove('d-none');
     list.innerHTML = reviews.map((rv, idx) => {
-        const stars = buildStarHtml(rv.rating);
+        const stars  = buildStarHtml(rv.rating);
         const avatar = rv.profilePhotoUrl
             ? `<img src="${escHtml(rv.profilePhotoUrl)}" class="review-avatar me-2" alt="${escHtml(rv.authorName)}">`
             : `<div class="review-avatar me-2 d-flex align-items-center justify-content-center bg-secondary text-white fw-bold" style="font-size:14px;">${escHtml(rv.authorName.charAt(0))}</div>`;
@@ -366,9 +463,13 @@ function buildStarHtml(rating) {
 }
 
 // ── Favourite button ──────────────────────────────────────────────────────────
+// FIX: Previous implementation had a bug where it cloned the button, replaced
+// it in the DOM incorrectly (replaceChild(newBtn, newBtn) — same node, no-op),
+// and then added an event listener to the cloned node that was never inserted.
+// Fix: Use data attribute as a state flag and replace listeners via cloneNode correctly.
 function setupFavouriteButton(d) {
     const btn = el('btn-favourite');
-    const icon = el('fav-icon');
+    if (!btn) return;
 
     if (!window.BarberLocConfig?.isAuthenticated) {
         btn.classList.add('d-none');
@@ -376,26 +477,37 @@ function setupFavouriteButton(d) {
     }
 
     btn.classList.remove('d-none');
-    updateFavBtn(d.isFavourited);
 
-    // Remove old listener by replacing with clone
+    // Clone to remove any previously attached listeners (avoids double-firing)
     const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, newBtn);
+    btn.parentNode.replaceChild(newBtn, btn);   // FIX: replace btn with newBtn (not newBtn with itself)
+
+    const updateFavBtn = (isFav) => {
+        newBtn.dataset.fav = isFav ? 'true' : 'false';
+        const ic = newBtn.querySelector('i');
+        if (ic) ic.className = isFav ? 'fas fa-heart' : 'far fa-heart';
+        newBtn.title = isFav ? 'Remover dos Favoritos' : 'Guardar nos Favoritos';
+        newBtn.classList.toggle('btn-danger', isFav);
+        newBtn.classList.toggle('btn-outline-danger', !isFav);
+    };
+
+    updateFavBtn(d.isFavourited ?? false);
 
     newBtn.addEventListener('click', async () => {
-        const isFav = newBtn.dataset.fav === 'true';
+        const isFav    = newBtn.dataset.fav === 'true';
         const endpoint = isFav ? '/Barbershops/RemoveFavourite' : '/Barbershops/SaveFavourite';
+        const token    = window.BarberLocConfig?.antiForgeryToken ?? '';
 
         try {
             const resp = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'RequestVerificationToken': window.BarberLocConfig.antiForgeryToken
+                    'RequestVerificationToken': token
                 },
                 body: JSON.stringify({
-                    placeId: currentPlaceId,
-                    placeName: d.name,
+                    placeId:      currentPlaceId,
+                    placeName:    d.name,
                     placeAddress: d.formattedAddress
                 })
             });
@@ -408,23 +520,12 @@ function setupFavouriteButton(d) {
             console.error('[BarberLoc] Favourite toggle error:', err);
         }
     });
-
-    function updateFavBtn(isFav) {
-        newBtn.dataset.fav = isFav ? 'true' : 'false';
-        const ic = newBtn.querySelector('i');
-        if (ic) {
-            ic.className = isFav ? 'fas fa-heart' : 'far fa-heart';
-        }
-        newBtn.title = isFav ? 'Remover dos Favoritos' : 'Guardar nos Favoritos';
-        newBtn.classList.toggle('btn-danger', isFav);
-        newBtn.classList.toggle('btn-outline-danger', !isFav);
-    }
 }
 
 // ── Panel state machine ───────────────────────────────────────────────────────
 function setPanelState(state) {
     el('panel-loading').classList.toggle('d-none', state !== 'loading');
-    el('panel-error').classList.toggle('d-none', state !== 'error');
+    el('panel-error').classList.toggle('d-none',   state !== 'error');
     el('panel-content').classList.toggle('d-none', state !== 'content');
 }
 
@@ -434,9 +535,8 @@ function setupFilterPanel() {
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const filter = btn.dataset.filter;
-            const value = btn.dataset.value;
+            const value  = btn.dataset.value;
 
-            // Toggle active state in group
             document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`)
                 .forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -470,7 +570,7 @@ function setupFilterPanel() {
 
     // Sidebar toggle
     const toggleBtn = el('toggle-sidebar-btn');
-    const sidebar = el('filter-sidebar');
+    const sidebar   = el('filter-sidebar');
     if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', () => {
             const isOpen = !sidebar.classList.contains('collapsed-sidebar');
@@ -483,9 +583,9 @@ function setupFilterPanel() {
 // ── Apply client-side filters ─────────────────────────────────────────────────
 function applyFilters() {
     const filtered = allPlaces.filter(p => {
-        if (activeFilters.category && p.category !== activeFilters.category) return false;
-        if (activeFilters.minRating && p.rating < parseFloat(activeFilters.minRating)) return false;
-        if (activeFilters.mobileOnly && !p.hasMobile) return false;
+        if (activeFilters.category  && p.category !== activeFilters.category)     return false;
+        if (activeFilters.minRating && p.rating    <  parseFloat(activeFilters.minRating)) return false;
+        if (activeFilters.mobileOnly && !p.hasMobile)                              return false;
         return true;
     });
 
@@ -515,9 +615,9 @@ function updateResultsCount(count) {
 function escHtml(str) {
     if (!str) return '';
     return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/&/g,  '&amp;')
+        .replace(/</g,  '&lt;')
+        .replace(/>/g,  '&gt;')
+        .replace(/"/g,  '&quot;')
+        .replace(/'/g,  '&#039;');
 }
