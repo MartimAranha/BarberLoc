@@ -2,7 +2,7 @@
 
 @{
     ViewData["Title"] = "Mapa Interativo de Barbearias";
-    var hasApiKey = !string.IsNullOrWhiteSpace(Model.GoogleMapsApiKey);
+    var isDemoMode = Model.IsDemoMode;
 }
 
 <meta name="description" content="Encontre as melhores barbearias e salões de beleza em Lisboa e Portugal no mapa interativo BarberLoc. Veja avaliações, horários e detalhes." />
@@ -177,15 +177,24 @@
         <p class="mb-0 small text-muted fw-medium">A carregar barbearias...</p>
     </div>
 
-    @* No-API-key informational banner (shown only when PlacesApiKey is blank) *@
-    @if (!hasApiKey)
+    @* Demo Mode banner (shown when no valid API key or Google:DemoMode = true) *@
+    @if (isDemoMode)
     {
         <div id="api-key-warning">
-            <div class="alert alert-info alert-dismissible fade show shadow-sm mb-0 small" role="alert">
-                <i class="fas fa-info-circle me-2"></i>
-                <strong>Modo demonstração.</strong>
-                Configure <code>Google:PlacesApiKey</code> em <code>appsettings.json</code>
-                para activar avaliações e fotos ao vivo. Os marcadores do mapa exibem dados de seed locais.
+            <div class="alert alert-warning alert-dismissible fade show shadow mb-0" role="alert"
+                 style="border-left: 4px solid #f59f00; border-radius: 0.85rem;">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="fas fa-flask mt-1 flex-shrink-0" style="color: #e67700;"></i>
+                    <div>
+                        <span class="badge rounded-pill me-1"
+                              style="background:#f59f00; color:#1a1a1a; font-size:.7rem; letter-spacing:.03em;">MODO DEMO</span>
+                        <strong class="text-dark">A usar dados locais de seed.</strong>
+                        <span class="text-dark small d-block mt-1">
+                            Configure <code>Google:PlacesApiKey</code> em <code>appsettings.json</code>
+                            para activar avaliações e fotos ao vivo do Google Places.
+                        </span>
+                    </div>
+                </div>
                 <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
             </div>
         </div>
@@ -202,6 +211,15 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="fw-bold mb-0 d-flex align-items-center gap-2">
                 <i class="fas fa-sliders-h text-primary"></i>Filtrar
+                @if (isDemoMode)
+                {
+                    <span class="badge rounded-pill small"
+                          style="background:#fff3bf; color:#7d5900; font-size:.65rem;
+                                 border: 1px solid #ffe066; letter-spacing:.03em;"
+                          title="Dados de seed locais — sem API key configurada">
+                        <i class="fas fa-flask me-1"></i>Demo
+                    </span>
+                }
             </h6>
             <button class="btn btn-sm btn-light p-1 px-2" id="btn-collapse-sidebar" aria-label="Fechar painel">
                 <i class="fas fa-times small"></i>

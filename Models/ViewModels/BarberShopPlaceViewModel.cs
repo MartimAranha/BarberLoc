@@ -43,6 +43,20 @@ namespace WebApplication1.Models.ViewModels
         [JsonPropertyName("photoReference")]
         public string? PhotoReference { get; set; }
 
+        /// <summary>
+        /// Category string used by the map JS to look up marker colour.
+        /// Values: "Barbershop" | "HairSalon" | "Unisex".
+        /// </summary>
+        [JsonPropertyName("category")]
+        public string Category { get; set; } = "Barbershop";
+
+        /// <summary>
+        /// True when the application is running in Demo Mode (no live API key configured).
+        /// The JS uses this to show an inline demo badge on markers with no real PlaceId.
+        /// </summary>
+        [JsonPropertyName("isDemoMode")]
+        public bool IsDemoMode { get; set; }
+
         // ── Computed display properties ─────────────────────────────────────────
 
         /// <summary>Human-readable rating string, e.g. "4.5 ★". Empty string when no rating.</summary>

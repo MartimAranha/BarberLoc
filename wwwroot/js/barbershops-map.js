@@ -249,8 +249,21 @@ function populatePanel(d) {
     // Name
     setTextField('name', d.name || '—');
 
-    // Mock data badge
-    el('mock-badge').classList.toggle('d-none', !d.isMock);
+    // Demo Mode / Mock data badge
+    const isDemo = d.isDemoMode || d.isMock || false;
+    el('mock-badge')?.classList.toggle('d-none', !isDemo);
+
+    // Reviews header — toggle between Google and local-seed icons
+    const googleIcon     = el('reviews-google-icon');
+    const demoIcon       = el('reviews-demo-icon');
+    const localBadge     = el('local-reviews-badge');
+    const reviewsHeading = el('reviews-heading-text');
+    if (googleIcon && demoIcon && localBadge && reviewsHeading) {
+        googleIcon.classList.toggle('d-none', isDemo);
+        demoIcon.classList.toggle('d-none', !isDemo);
+        localBadge.classList.toggle('d-none', !isDemo);
+        reviewsHeading.textContent = isDemo ? 'Avaliações Locais' : 'Avaliações Google';
+    }
 
     // Star rating
     renderStars('panel-stars', d.rating);
@@ -333,21 +346,28 @@ function populatePanel(d) {
 
 // ── Fill panel from basic marker data (no Place ID) ──────────────────────────
 function fillBasicPanelFromMarker(place) {
-    setTextField('name',   place.name    || '—');
+    setTextField('name',    place.name    || '—');
     setTextField('address', place.address || '—');
     setTextField('rating',  place.rating  ? place.rating.toFixed(1) : '—');
     renderStars('panel-stars', place.rating);
     setTextField('ratings-total', '');
 
-    el('open-badge').classList.add('d-none');
-    el('phone-row').classList.add('d-none');
-    el('website-row').classList.add('d-none');
-    el('hours-section').classList.add('d-none');
-    el('reviews-section').classList.add('d-none');
-    el('photo-carousel-wrapper').classList.add('d-none');
-    el('photo-placeholder').classList.remove('d-none');
-    el('mock-badge').classList.add('d-none');
-    el('btn-favourite').classList.add('d-none');
+    el('open-badge')?.classList.add('d-none');
+    el('phone-row')?.classList.add('d-none');
+    el('website-row')?.classList.add('d-none');
+    el('hours-section')?.classList.add('d-none');
+    el('reviews-section')?.classList.add('d-none');
+    el('photo-carousel-wrapper')?.classList.add('d-none');
+    el('photo-placeholder')?.classList.remove('d-none');
+    el('mock-badge')?.classList.add('d-none');
+    el('btn-favourite')?.classList.add('d-none');
+
+    // Reset review header to default (Google) state
+    el('reviews-google-icon')?.classList.remove('d-none');
+    el('reviews-demo-icon')?.classList.add('d-none');
+    el('local-reviews-badge')?.classList.add('d-none');
+    const rh = el('reviews-heading-text');
+    if (rh) rh.textContent = 'Avaliações Google';
 
     const mapsBtn = el('btn-google-maps');
     if (mapsBtn) {

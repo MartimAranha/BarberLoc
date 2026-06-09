@@ -55,5 +55,12 @@ namespace WebApplication1.Models
 
         /// <summary>UTC timestamp of the last successful Places API fetch. Used to decide cache staleness.</summary>
         public DateTime LastFetchedAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        /// Category of this barbershop (Barbershop, HairSalon, Unisex).
+        /// Stored here so the map can colour markers without a join to the Barbershops table on every page load.
+        /// Defaults to <see cref="BarbershopCategory.Barbershop"/>.
+        /// </summary>
+        public BarbershopCategory Category { get; set; } = BarbershopCategory.Barbershop;
     }
 }

@@ -74,10 +74,12 @@
             @* Info Section *@
             <div class="px-4 pt-4">
 
-                @* Mock data badge *@
+                @* Demo Mode badge — shown via JS when isMock/isDemoMode is true *@
                 <div id="mock-badge" class="d-none mb-2">
-                    <span class="badge bg-secondary">
-                        <i class="fas fa-flask me-1"></i> Dados de demonstração
+                    <span class="badge rounded-pill"
+                          style="background:#fff3bf; color:#7d5900; border: 1px solid #ffe066;
+                                 font-size:.72rem; letter-spacing:.03em;">
+                        <i class="fas fa-flask me-1"></i>Modo Demo &mdash; Dados Locais
                     </span>
                 </div>
 
@@ -137,10 +139,19 @@
                     </div>
                 </div>
 
-                @* Google Reviews *@
+                @* Google / Local Reviews *@
                 <div id="reviews-section" class="d-none">
-                    <h6 class="fw-semibold mb-3">
-                        <i class="fab fa-google text-danger me-2"></i>Avaliações Google
+                    <h6 class="fw-semibold mb-3 d-flex align-items-center gap-2">
+                        @* Google icon: shown in live mode *@
+                        <i class="fab fa-google text-danger" id="reviews-google-icon"></i>
+                        @* Flask icon: shown in demo mode — toggled by JS *@
+                        <i class="fas fa-database text-warning d-none" id="reviews-demo-icon"></i>
+                        <span id="reviews-heading-text">Avaliações Google</span>
+                        <span id="local-reviews-badge" class="badge rounded-pill d-none"
+                              style="background:#fff3bf; color:#7d5900; border:1px solid #ffe066;
+                                     font-size:.65rem; letter-spacing:.03em;">
+                            Locais
+                        </span>
                     </h6>
                     <div id="panel-reviews-list">
                         @* Reviews injected by JS *@

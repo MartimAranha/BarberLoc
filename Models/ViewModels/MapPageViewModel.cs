@@ -24,5 +24,11 @@ namespace WebApplication1.Models.ViewModels
 
         /// <summary>Default map centre longitude.</summary>
         public double DefaultLongitude { get; set; } = -9.1399;
+
+        /// <summary>
+        /// True when no valid Google Places API key is configured (or <c>Google:DemoMode = true</c>
+        /// is explicitly set in appsettings). Controls the demo-mode banner and mock-data indicators.
+        /// </summary>
+        public bool IsDemoMode { get; set; }
     }
 }

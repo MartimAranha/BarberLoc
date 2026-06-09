@@ -21,7 +21,7 @@ namespace WebApplication1.Data
                 await userManager.AddToRoleAsync(adminUser, "Admin");
             }
 
-            // Seed Sample User
+            // Seed primary sample user (used for bookings and reviews)
             if (await userManager.FindByEmailAsync("joao@example.com") == null)
             {
                 var newSampleUser = new ApplicationUser { UserName = "joao@example.com", Email = "joao@example.com", FullName = "João Silva", DateOfBirth = new DateTime(1995, 5, 15), Address = "Lisboa, Portugal", EmailConfirmed = true, CreatedAt = DateTime.Now };
@@ -33,6 +33,11 @@ namespace WebApplication1.Data
             {
                 sampleUser = await userManager.FindByEmailAsync("joao@example.com");
             }
+
+            // Seed two extra synthetic reviewer accounts (no password → Google-auth-only profiles)
+            // These provide variety in the seeded Review records so the demo panel looks realistic.
+            var reviewer2 = await EnsureSyntheticUser(userManager, "ana@example.com", "Ana Costa", new DateTime(1992, 3, 22));
+            var reviewer3 = await EnsureSyntheticUser(userManager, "carlos@example.com", "Carlos Mendes", new DateTime(1988, 11, 5));
 
             // ── Seed Barbershops ─────────────────────────────────────────────────
             var hasMissingPlaceIds = await context.Barbershops.AnyAsync(b => b.PlaceId == null);
@@ -49,7 +54,7 @@ namespace WebApplication1.Data
 
                     // Obtain Apify configuration safely
                     var apifyToken = config["Apify:Token"];
-                    var apifyBase = config["Apify:DatasetUrl"];
+                    var apifyBase  = config["Apify:DatasetUrl"];
                     var apifySeeded = false;
 
                     if (!string.IsNullOrWhiteSpace(apifyBase))
@@ -72,18 +77,18 @@ namespace WebApplication1.Data
 
                                     var barbershop = new Barbershop
                                     {
-                                        Name = place.title ?? "Barbearia",
-                                        Description = !string.IsNullOrEmpty(place.website) ? $"Website: {place.website}" : null,
-                                        Address = place.address ?? "Endereço indisponível",
-                                        Latitude = place.location!.lat,
-                                        Longitude = place.location.lng,
-                                        PhoneNumber = place.phone,
-                                        ImageUrl = place.imageUrl,
+                                        Name          = place.title ?? "Barbearia",
+                                        Description   = !string.IsNullOrEmpty(place.website) ? $"Website: {place.website}" : null,
+                                        Address       = place.address ?? "Endereço indisponível",
+                                        Latitude      = place.location!.lat,
+                                        Longitude     = place.location.lng,
+                                        PhoneNumber   = place.phone,
+                                        ImageUrl      = place.imageUrl,
                                         AverageRating = place.totalScore ?? 0,
-                                        PlaceId = place.placeId,
-                                        Category = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
-                                        IsActive = true,
-                                        CreatedAt = DateTime.Now
+                                        PlaceId       = place.placeId,
+                                        Category      = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
+                                        IsActive      = true,
+                                        CreatedAt     = DateTime.Now
                                     };
 
                                     context.Barbershops.Add(barbershop);
@@ -98,10 +103,10 @@ namespace WebApplication1.Data
                         }
                     }
 
-                    // ── Hardcoded fallback: seed 3 providers if Apify unavailable ─
+                    // ── Hardcoded fallback: seed rich demo providers if Apify unavailable ─
                     if (!apifySeeded)
                     {
-                        await SeedFallbackProvidersAsync(context, sampleUser);
+                        await SeedFallbackProvidersAsync(context, sampleUser, reviewer2, reviewer3);
                     }
                 }
                 catch (Exception ex)
@@ -110,7 +115,7 @@ namespace WebApplication1.Data
                     // Ensure fallback seeding even if the try block partially executed
                     if (!context.Barbershops.Any())
                     {
-                        await SeedFallbackProvidersAsync(context, sampleUser);
+                        await SeedFallbackProvidersAsync(context, sampleUser, reviewer2, reviewer3);
                     }
                 }
             }
@@ -118,19 +123,57 @@ namespace WebApplication1.Data
             // ── Seed FavouritePlaces ─────────────────────────────────────────────
             await SeedFavouritePlacesAsync(context, sampleUser);
 
-            // ── Seed BarberShopPlaces (Google Places cache / map markers) ──────────
+            // ── Seed BarberShopPlaces (Google Places cache / map markers) ─────────
             await SeedBarberShopPlacesAsync(context);
         }
 
-        // ── Seed BarberShopPlaces (Google Places cache table / map markers) ──────────
+        // ── Synthetic reviewer helper ────────────────────────────────────────────
+
+        /// <summary>
+        /// Creates a Google-auth-only user account (no password) for use as a seed reviewer.
+        /// Idempotent — returns the existing user if already present.
+        /// </summary>
+        private static async Task<ApplicationUser?> EnsureSyntheticUser(
+            UserManager<ApplicationUser> userManager, string email, string fullName, DateTime dob)
+        {
+            var existing = await userManager.FindByEmailAsync(email);
+            if (existing != null) return existing;
+
+            var user = new ApplicationUser
+            {
+                UserName        = email,
+                Email           = email,
+                FullName        = fullName,
+                DateOfBirth     = dob,
+                EmailConfirmed  = true,
+                CreatedAt       = DateTime.Now
+            };
+
+            // No password — these accounts are Google-auth-only synthetic reviewers
+            var result = await userManager.CreateAsync(user);
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(user, "User");
+                return user;
+            }
+
+            Console.WriteLine($"[DbSeeder] Warning: could not create synthetic user {email}: {string.Join(", ", result.Errors.Select(e => e.Description))}");
+            return null;
+        }
+
+        // ── Seed BarberShopPlaces (map markers cache table) ─────────────────────
 
         private static async Task SeedBarberShopPlacesAsync(ApplicationDbContext context)
         {
-            // Idempotent — only seed if the table is empty
-            if (await context.BarberShopPlaces.AnyAsync()) return;
+            // Idempotent — skip if we already have the full set of 8 records
+            if (await context.BarberShopPlaces.CountAsync() >= 8) return;
 
-            // Opening hours JSON shared by Lisbon city-centre barbershops
-            var weekdayHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
+            // Remove any partial seed to avoid unique-index violations on PlaceId
+            context.BarberShopPlaces.RemoveRange(context.BarberShopPlaces);
+            await context.SaveChangesAsync();
+
+            // ── Shared opening-hours JSON strings ─────────────────────────────────
+            var standardHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
             {
                 "Segunda-feira: 09:00 – 20:00",
                 "Terça-feira: 09:00 – 20:00",
@@ -163,58 +206,161 @@ namespace WebApplication1.Data
                 "Domingo: Fechado"
             });
 
+            var braganoBraHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                "Segunda-feira: 10:00 – 19:00",
+                "Terça-feira: 10:00 – 19:00",
+                "Quarta-feira: 10:00 – 19:00",
+                "Quinta-feira: 10:00 – 19:00",
+                "Sexta-feira: 10:00 – 20:00",
+                "Sábado: 09:00 – 17:00",
+                "Domingo: Fechado"
+            });
+
             context.BarberShopPlaces.AddRange(new[]
             {
-                // ── Record 1: Barbearia Clássica Lisboa ──────────────────────────────
-                // Matches PlaceId used in Barbershops seed and FavouritePlaces seed.
+                // ── 1: Barbearia Clássica Lisboa (Baixa) ────────────────────────────
                 new BarberShopPlace
                 {
-                    PlaceId = "ChIJBarbershopMockLisboa001",
-                    Name = "Barbearia Clássica Lisboa",
-                    Address = "Rua Augusta 120, 1100-053 Lisboa",
-                    PhoneNumber = "+351 21 000 1111",
-                    Website = "https://www.barberloc.pt",
-                    Rating = 4.8,
+                    PlaceId          = "ChIJBarbershopMockLisboa001",
+                    Name             = "Barbearia Clássica Lisboa",
+                    Address          = "Rua Augusta 120, 1100-053 Lisboa",
+                    PhoneNumber      = "+351 21 000 1111",
+                    Website          = "https://www.barberloc.pt",
+                    Rating           = 4.8,
                     UserRatingsTotal = 214,
-                    Latitude = 38.7100,
-                    Longitude = -9.1380,
-                    OpeningHoursJson = weekdayHoursJson,
-                    PhotoReference = null, // no photo reference without live API
-                    LastFetchedAt = DateTime.UtcNow
+                    Latitude         = 38.7100,
+                    Longitude        = -9.1380,
+                    OpeningHoursJson = standardHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Barbershop,
+                    LastFetchedAt    = DateTime.UtcNow
                 },
 
-                // ── Record 2: Salão Elegance Cascais ───────────────────────────────
+                // ── 2: Salão Elegance Cascais ────────────────────────────────────────
                 new BarberShopPlace
                 {
-                    PlaceId = "ChIJHairSalonMockCascais002",
-                    Name = "Salão Elegance Cascais",
-                    Address = "Av. Marginal 55, 2750-341 Cascais",
-                    PhoneNumber = "+351 21 000 2222",
-                    Website = "https://www.elegancecascais.pt",
-                    Rating = 4.6,
+                    PlaceId          = "ChIJHairSalonMockCascais002",
+                    Name             = "Salão Elegance Cascais",
+                    Address          = "Av. Marginal 55, 2750-341 Cascais",
+                    PhoneNumber      = "+351 21 000 2222",
+                    Website          = "https://www.elegancecascais.pt",
+                    Rating           = 4.6,
                     UserRatingsTotal = 87,
-                    Latitude = 38.6968,
-                    Longitude = -9.4207,
+                    Latitude         = 38.6968,
+                    Longitude        = -9.4207,
                     OpeningHoursJson = eleganceHoursJson,
-                    PhotoReference = null,
-                    LastFetchedAt = DateTime.UtcNow
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.HairSalon,
+                    LastFetchedAt    = DateTime.UtcNow
                 },
 
-                // ── Record 3: UrbanCuts Porto ─────────────────────────────────────
+                // ── 3: UrbanCuts Porto (Bolhão) ──────────────────────────────────────
                 new BarberShopPlace
                 {
-                    PlaceId = "ChIJBarbershopMockPorto003",
-                    Name = "UrbanCuts Porto",
-                    Address = "Rua de Santa Catarina 300, 4000-447 Porto",
-                    PhoneNumber = "+351 22 000 3333",
-                    Website = "https://www.urbancutsporto.pt",
-                    Rating = 4.5,
+                    PlaceId          = "ChIJBarbershopMockPorto003",
+                    Name             = "UrbanCuts Porto",
+                    Address          = "Rua de Santa Catarina 300, 4000-447 Porto",
+                    PhoneNumber      = "+351 22 000 3333",
+                    Website          = "https://www.urbancutsporto.pt",
+                    Rating           = 4.5,
                     UserRatingsTotal = 163,
-                    Latitude = 41.1496,
-                    Longitude = -8.6109,
+                    Latitude         = 41.1496,
+                    Longitude        = -8.6109,
                     OpeningHoursJson = urbanHoursJson,
-                    PhotoReference = null,
-                    LastFetchedAt = DateTime.UtcNow
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Unisex,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 4: Barbearia Príncipe Real (Lisboa) ──────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJBarbershopMockLisboa004",
+                    Name             = "Barbearia Príncipe Real",
+                    Address          = "Rua da Escola Politécnica 42, 1250-100 Lisboa",
+                    PhoneNumber      = "+351 21 000 4444",
+                    Website          = "https://www.barbeariaprincipereal.pt",
+                    Rating           = 4.7,
+                    UserRatingsTotal = 98,
+                    Latitude         = 38.7183,
+                    Longitude        = -9.1502,
+                    OpeningHoursJson = standardHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Barbershop,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 5: Cabeleireiro Alfama (Lisboa) ──────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJHairSalonMockAlfama005",
+                    Name             = "Cabeleireiro Alfama",
+                    Address          = "Rua de São João da Praça 10, 1100-521 Lisboa",
+                    PhoneNumber      = "+351 21 000 5555",
+                    Website          = null,
+                    Rating           = 4.3,
+                    UserRatingsTotal = 52,
+                    Latitude         = 38.7118,
+                    Longitude        = -9.1320,
+                    OpeningHoursJson = eleganceHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.HairSalon,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 6: Fade Factory Lisboa (Mouraria) ────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJBarbershopMockMouraria006",
+                    Name             = "Fade Factory Lisboa",
+                    Address          = "Rua do Benformoso 198, 1100-084 Lisboa",
+                    PhoneNumber      = "+351 21 000 6666",
+                    Website          = "https://www.fadefactory.pt",
+                    Rating           = 4.9,
+                    UserRatingsTotal = 311,
+                    Latitude         = 38.7151,
+                    Longitude        = -9.1351,
+                    OpeningHoursJson = urbanHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Barbershop,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 7: Studio Unisex Braga ───────────────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJUnisexMockBraga007",
+                    Name             = "Studio Unisex Braga",
+                    Address          = "Rua do Souto 80, 4700-239 Braga",
+                    PhoneNumber      = "+351 25 300 7777",
+                    Website          = "https://www.studiounisexbraga.pt",
+                    Rating           = 4.4,
+                    UserRatingsTotal = 74,
+                    Latitude         = 41.5503,
+                    Longitude        = -8.4200,
+                    OpeningHoursJson = braganoBraHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Unisex,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 8: Barbearia NorteSul (Setúbal) ─────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJBarbershopMockSetubal008",
+                    Name             = "Barbearia NorteSul",
+                    Address          = "Av. Luísa Todi 180, 2900-451 Setúbal",
+                    PhoneNumber      = "+351 26 500 8888",
+                    Website          = null,
+                    Rating           = 4.2,
+                    UserRatingsTotal = 39,
+                    Latitude         = 38.5243,
+                    Longitude        = -8.8882,
+                    OpeningHoursJson = standardHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Barbershop,
+                    LastFetchedAt    = DateTime.UtcNow
                 }
             });
 
@@ -232,27 +378,35 @@ namespace WebApplication1.Data
             {
                 new FavouritePlace
                 {
-                    UserId = sampleUser.Id,
-                    PlaceId = "ChIJBarbershopMockLisboa001",
-                    PlaceName = "Barbearia Clássica Lisboa",
+                    UserId       = sampleUser.Id,
+                    PlaceId      = "ChIJBarbershopMockLisboa001",
+                    PlaceName    = "Barbearia Clássica Lisboa",
                     PlaceAddress = "Rua Augusta 120, 1100-053 Lisboa",
-                    SavedAt = DateTime.UtcNow.AddDays(-30)
+                    SavedAt      = DateTime.UtcNow.AddDays(-30)
                 },
                 new FavouritePlace
                 {
-                    UserId = sampleUser.Id,
-                    PlaceId = "ChIJHairSalonMockCascais002",
-                    PlaceName = "Salão Elegance Cascais",
+                    UserId       = sampleUser.Id,
+                    PlaceId      = "ChIJHairSalonMockCascais002",
+                    PlaceName    = "Salão Elegance Cascais",
                     PlaceAddress = "Av. Marginal 55, 2750-341 Cascais",
-                    SavedAt = DateTime.UtcNow.AddDays(-14)
+                    SavedAt      = DateTime.UtcNow.AddDays(-14)
                 },
                 new FavouritePlace
                 {
-                    UserId = sampleUser.Id,
-                    PlaceId = "ChIJBarbershopMockPorto003",
-                    PlaceName = "UrbanCuts Porto",
+                    UserId       = sampleUser.Id,
+                    PlaceId      = "ChIJBarbershopMockPorto003",
+                    PlaceName    = "UrbanCuts Porto",
                     PlaceAddress = "Rua de Santa Catarina 300, 4000-447 Porto",
-                    SavedAt = DateTime.UtcNow.AddDays(-7)
+                    SavedAt      = DateTime.UtcNow.AddDays(-7)
+                },
+                new FavouritePlace
+                {
+                    UserId       = sampleUser.Id,
+                    PlaceId      = "ChIJBarbershopMockMouraria006",
+                    PlaceName    = "Fade Factory Lisboa",
+                    PlaceAddress = "Rua do Benformoso 198, 1100-084 Lisboa",
+                    SavedAt      = DateTime.UtcNow.AddDays(-2)
                 }
             });
 
@@ -261,137 +415,189 @@ namespace WebApplication1.Data
 
         // ── Fallback Hardcoded Seed Data ─────────────────────────────────────────
 
-        private static async Task SeedFallbackProvidersAsync(ApplicationDbContext context, ApplicationUser? sampleUser)
+        private static async Task SeedFallbackProvidersAsync(
+            ApplicationDbContext context,
+            ApplicationUser?     sampleUser,
+            ApplicationUser?     reviewer2,
+            ApplicationUser?     reviewer3)
         {
             // ── Provider 1: Barbearia Clássica Lisboa ────────────────────────────
             var provider1 = new Barbershop
             {
-                Name = "Barbearia Clássica Lisboa",
-                Description = "Barbearia tradicional no coração de Lisboa. Cortes modernos e clássicos, tratamentos de barba e ambiente premium.",
-                Address = "Rua Augusta 120, 1100-053 Lisboa",
-                Latitude = 38.7100,
-                Longitude = -9.1380,
-                PhoneNumber = "+351 21 000 1111",
-                Email = "classica@barberloc.pt",
-                OpeningHours = "Seg-Sex: 09:00–20:00 | Sáb: 09:00–18:00",
-                ImageUrl = "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&q=80",
+                Name          = "Barbearia Clássica Lisboa",
+                Description   = "Barbearia tradicional no coração de Lisboa. Cortes modernos e clássicos, tratamentos de barba e ambiente premium.",
+                Address       = "Rua Augusta 120, 1100-053 Lisboa",
+                Latitude      = 38.7100,
+                Longitude     = -9.1380,
+                PhoneNumber   = "+351 21 000 1111",
+                Email         = "classica@barberloc.pt",
+                OpeningHours  = "Seg-Sex: 09:00–20:00 | Sáb: 09:00–18:00",
+                ImageUrl      = "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&q=80",
                 AverageRating = 4.8,
-                PlaceId = "ChIJBarbershopMockLisboa001",
-                Category = BarbershopCategory.Barbershop,
-                IsActive = true,
-                CreatedAt = DateTime.Now.AddMonths(-6)
+                PlaceId       = "ChIJBarbershopMockLisboa001",
+                Category      = BarbershopCategory.Barbershop,
+                IsActive      = true,
+                CreatedAt     = DateTime.Now.AddMonths(-6)
             };
             context.Barbershops.Add(provider1);
             await context.SaveChangesAsync();
 
             context.Services.AddRange(new[]
             {
-                new Service { BarbershopId = provider1.Id, Name = "Corte de Cabelo", Description = "Corte moderno ou clássico com acabamento perfeito.", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, IsMobile = true, TargetGender = TargetGender.Male },
-                new Service { BarbershopId = provider1.Id, Name = "Aparar Barba", Description = "Barba tradicional com toalha quente e navalha.", Price = 10.00m, DurationMinutes = 20, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Male },
-                new Service { BarbershopId = provider1.Id, Name = "Corte + Barba", Description = "Pack completo com desconto especial.", Price = 22.00m, DurationMinutes = 45, IsAvailable = true, IsMobile = true, TargetGender = TargetGender.Male }
+                new Service { BarbershopId = provider1.Id, Name = "Corte de Cabelo",  Description = "Corte moderno ou clássico com acabamento perfeito.", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Male },
+                new Service { BarbershopId = provider1.Id, Name = "Aparar Barba",     Description = "Barba tradicional com toalha quente e navalha.",      Price = 10.00m, DurationMinutes = 20, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Male },
+                new Service { BarbershopId = provider1.Id, Name = "Corte + Barba",    Description = "Pack completo com desconto especial.",                 Price = 22.00m, DurationMinutes = 45, IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Male }
             });
             await context.SaveChangesAsync();
+
+            // Local reviews for provider 1 (used by GetDetails in Demo Mode)
+            await SeedReviewsForShop(context, provider1.Id, new[]
+            {
+                (sampleUser,  5, "Melhor barbearia de Lisboa! Atendimento impecável e corte perfeito. Voltarei sempre.",           DateTime.Now.AddDays(-5)),
+                (reviewer2,   5, "Excelente serviço, preços justos e espaço muito agradável. Recomendo a toda a gente.",           DateTime.Now.AddDays(-12)),
+                (reviewer3,   4, "Muito bom corte e atendimento simpático. A única ressalva é a espera, mas vale a pena.",         DateTime.Now.AddDays(-21))
+            });
 
             // ── Provider 2: Salão Elegance Cascais ──────────────────────────────
             var provider2 = new Barbershop
             {
-                Name = "Salão Elegance Cascais",
-                Description = "Cabeleireiro de luxo em Cascais. Especialistas em coloração, penteados e tratamentos capilares para toda a família.",
-                Address = "Av. Marginal 55, 2750-341 Cascais",
-                Latitude = 38.6968,
-                Longitude = -9.4207,
-                PhoneNumber = "+351 21 000 2222",
-                Email = "elegance@barberloc.pt",
-                OpeningHours = "Ter-Sáb: 10:00–19:00 | Dom: 10:00–14:00",
-                ImageUrl = "https://images.unsplash.com/photo-1562322140-8baeececf3df?w=800&q=80",
+                Name          = "Salão Elegance Cascais",
+                Description   = "Cabeleireiro de luxo em Cascais. Especialistas em coloração, penteados e tratamentos capilares para toda a família.",
+                Address       = "Av. Marginal 55, 2750-341 Cascais",
+                Latitude      = 38.6968,
+                Longitude     = -9.4207,
+                PhoneNumber   = "+351 21 000 2222",
+                Email         = "elegance@barberloc.pt",
+                OpeningHours  = "Ter-Sáb: 10:00–19:00 | Dom: 10:00–14:00",
+                ImageUrl      = "https://images.unsplash.com/photo-1562322140-8baeececf3df?w=800&q=80",
                 AverageRating = 4.6,
-                PlaceId = "ChIJHairSalonMockCascais002",
-                Category = BarbershopCategory.HairSalon,
-                IsActive = true,
-                CreatedAt = DateTime.Now.AddMonths(-4)
+                PlaceId       = "ChIJHairSalonMockCascais002",
+                Category      = BarbershopCategory.HairSalon,
+                IsActive      = true,
+                CreatedAt     = DateTime.Now.AddMonths(-4)
             };
             context.Barbershops.Add(provider2);
             await context.SaveChangesAsync();
 
             context.Services.AddRange(new[]
             {
-                new Service { BarbershopId = provider2.Id, Name = "Corte Feminino", Description = "Corte e lavagem especializada para senhora.", Price = 28.00m, DurationMinutes = 50, IsAvailable = true, IsMobile = true, TargetGender = TargetGender.Female },
-                new Service { BarbershopId = provider2.Id, Name = "Coloração Completa", Description = "Coloração com produtos premium e acabamento brilhante.", Price = 65.00m, DurationMinutes = 120, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Female },
-                new Service { BarbershopId = provider2.Id, Name = "Corte Masculino", Description = "Corte e estilização clássica de homem.", Price = 18.00m, DurationMinutes = 30, IsAvailable = true, IsMobile = true, TargetGender = TargetGender.Male }
+                new Service { BarbershopId = provider2.Id, Name = "Corte Feminino",      Description = "Corte e lavagem especializada para senhora.",                  Price = 28.00m, DurationMinutes = 50,  IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Female },
+                new Service { BarbershopId = provider2.Id, Name = "Coloração Completa",  Description = "Coloração com produtos premium e acabamento brilhante.",       Price = 65.00m, DurationMinutes = 120, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Female },
+                new Service { BarbershopId = provider2.Id, Name = "Corte Masculino",     Description = "Corte e estilização clássica de homem.",                      Price = 18.00m, DurationMinutes = 30,  IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Male }
             });
             await context.SaveChangesAsync();
+
+            // Local reviews for provider 2
+            await SeedReviewsForShop(context, provider2.Id, new[]
+            {
+                (reviewer2,   5, "Fantástico! A coloração ficou exatamente como eu queria. Profissionais de topo.",                DateTime.Now.AddDays(-3)),
+                (sampleUser,  4, "Bom serviço e espaço muito elegante. Um pouco caro mas a qualidade justifica.",                 DateTime.Now.AddDays(-18)),
+                (reviewer3,   5, "O melhor cabeleireiro de Cascais sem dúvida. Atendimento personalizado e resultado incrível.",  DateTime.Now.AddDays(-30))
+            });
 
             // ── Provider 3: UrbanCuts Porto ──────────────────────────────────────
             var provider3 = new Barbershop
             {
-                Name = "UrbanCuts Porto",
-                Description = "Barbearia moderna no Porto. Cortes urbanos, fade e serviço ao domicílio disponível em toda a cidade.",
-                Address = "Rua de Santa Catarina 300, 4000-447 Porto",
-                Latitude = 41.1496,
-                Longitude = -8.6109,
-                PhoneNumber = "+351 22 000 3333",
-                Email = "urbancutsporto@barberloc.pt",
-                OpeningHours = "Seg-Sáb: 09:00–21:00",
-                ImageUrl = "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80",
+                Name          = "UrbanCuts Porto",
+                Description   = "Barbearia moderna no Porto. Cortes urbanos, fade e serviço ao domicílio disponível em toda a cidade.",
+                Address       = "Rua de Santa Catarina 300, 4000-447 Porto",
+                Latitude      = 41.1496,
+                Longitude     = -8.6109,
+                PhoneNumber   = "+351 22 000 3333",
+                Email         = "urbancutsporto@barberloc.pt",
+                OpeningHours  = "Seg-Sáb: 09:00–21:00",
+                ImageUrl      = "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80",
                 AverageRating = 4.5,
-                PlaceId = "ChIJBarbershopMockPorto003",
-                Category = BarbershopCategory.Unisex,
-                IsActive = true,
-                CreatedAt = DateTime.Now.AddMonths(-2)
+                PlaceId       = "ChIJBarbershopMockPorto003",
+                Category      = BarbershopCategory.Unisex,
+                IsActive      = true,
+                CreatedAt     = DateTime.Now.AddMonths(-2)
             };
             context.Barbershops.Add(provider3);
             await context.SaveChangesAsync();
 
             context.Services.AddRange(new[]
             {
-                new Service { BarbershopId = provider3.Id, Name = "Fade / Degradê", Description = "Fade skin, low, mid ou high com acabamento premium.", Price = 18.00m, DurationMinutes = 40, IsAvailable = true, IsMobile = true, TargetGender = TargetGender.Male },
-                new Service { BarbershopId = provider3.Id, Name = "Corte Unisexo", Description = "Corte moderno para qualquer género.", Price = 20.00m, DurationMinutes = 35, IsAvailable = true, IsMobile = true, TargetGender = TargetGender.Unisex },
-                new Service { BarbershopId = provider3.Id, Name = "Tratamento de Barba", Description = "Hidratação, aparar e modelação completa.", Price = 12.00m, DurationMinutes = 25, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Male }
+                new Service { BarbershopId = provider3.Id, Name = "Fade / Degradê",      Description = "Fade skin, low, mid ou high com acabamento premium.",         Price = 18.00m, DurationMinutes = 40, IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Male },
+                new Service { BarbershopId = provider3.Id, Name = "Corte Unisexo",       Description = "Corte moderno para qualquer género.",                          Price = 20.00m, DurationMinutes = 35, IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Unisex },
+                new Service { BarbershopId = provider3.Id, Name = "Tratamento de Barba", Description = "Hidratação, aparar e modelação completa.",                    Price = 12.00m, DurationMinutes = 25, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Male }
             });
             await context.SaveChangesAsync();
 
-            // ── Seed 2 sample bookings (require a registered user) ───────────────
-            if (sampleUser != null)
+            // Local reviews for provider 3
+            await SeedReviewsForShop(context, provider3.Id, new[]
             {
-                // Only seed if there are no bookings yet
-                if (!await context.Bookings.AnyAsync())
+                (reviewer3,   5, "O fade ficou perfeito! Nunca tinha visto um trabalho tão cuidado. Voltei na semana seguinte.",   DateTime.Now.AddDays(-2)),
+                (sampleUser,  4, "Excelente barbearia, ambiente moderno e staff muito simpático. Recomendo o corte unisexo.",      DateTime.Now.AddDays(-9)),
+                (reviewer2,   5, "Serviço de domicílio fantástico, pontual e com um resultado profissional. 5 estrelas bem dadas.", DateTime.Now.AddDays(-25))
+            });
+
+            // ── Sample Bookings ──────────────────────────────────────────────────
+            if (sampleUser != null && !await context.Bookings.AnyAsync())
+            {
+                var service1 = await context.Services
+                    .FirstOrDefaultAsync(s => s.BarbershopId == provider1.Id && s.Name == "Corte de Cabelo");
+                var service3 = await context.Services
+                    .FirstOrDefaultAsync(s => s.BarbershopId == provider3.Id && s.Name == "Fade / Degradê");
+
+                context.Bookings.Add(new Booking
                 {
-                    var service1 = await context.Services
-                        .FirstOrDefaultAsync(s => s.BarbershopId == provider1.Id && s.Name == "Corte de Cabelo");
-                    var service3 = await context.Services
-                        .FirstOrDefaultAsync(s => s.BarbershopId == provider3.Id && s.Name == "Fade / Degradê");
+                    UserId       = sampleUser.Id,
+                    BarbershopId = provider1.Id,
+                    ServiceId    = service1?.Id,
+                    BookingDate  = DateTime.Today.AddDays(3),
+                    BookingTime  = new TimeSpan(10, 30, 0),
+                    Status       = BookingStatus.Confirmed,
+                    Notes        = "Preferência por corte clássico com produto.",
+                    IsOnSite     = false,
+                    CreatedAt    = DateTime.Now.AddDays(-1)
+                });
 
-                    context.Bookings.Add(new Booking
-                    {
-                        UserId = sampleUser.Id,
-                        BarbershopId = provider1.Id,
-                        ServiceId = service1?.Id,
-                        BookingDate = DateTime.Today.AddDays(3),
-                        BookingTime = new TimeSpan(10, 30, 0),
-                        Status = BookingStatus.Confirmed,
-                        Notes = "Preferência por corte clássico com produto.",
-                        IsOnSite = false,
-                        CreatedAt = DateTime.Now.AddDays(-1)
-                    });
+                context.Bookings.Add(new Booking
+                {
+                    UserId           = sampleUser.Id,
+                    BarbershopId     = provider3.Id,
+                    ServiceId        = service3?.Id,
+                    BookingDate      = DateTime.Today.AddDays(7),
+                    BookingTime      = new TimeSpan(14, 0, 0),
+                    Status           = BookingStatus.Pending,
+                    Notes            = "Serviço ao domicílio — apartamento no 3º andar.",
+                    IsOnSite         = true,
+                    TravelDistanceKm = 5.2,
+                    TravelFee        = 8.90m,
+                    CreatedAt        = DateTime.Now
+                });
 
-                    context.Bookings.Add(new Booking
-                    {
-                        UserId = sampleUser.Id,
-                        BarbershopId = provider3.Id,
-                        ServiceId = service3?.Id,
-                        BookingDate = DateTime.Today.AddDays(7),
-                        BookingTime = new TimeSpan(14, 0, 0),
-                        Status = BookingStatus.Pending,
-                        Notes = "Serviço ao domicílio — apartamento no 3º andar.",
-                        IsOnSite = true,
-                        TravelDistanceKm = 5.2,
-                        TravelFee = 8.90m,
-                        CreatedAt = DateTime.Now
-                    });
-
-                    await context.SaveChangesAsync();
-                }
+                await context.SaveChangesAsync();
             }
+        }
+
+        // ── Review helper ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Seeds <see cref="Review"/> records for a barbershop, skipping if reviews already exist.
+        /// </summary>
+        private static async Task SeedReviewsForShop(
+            ApplicationDbContext context,
+            int barbershopId,
+            IEnumerable<(ApplicationUser? user, int rating, string comment, DateTime createdAt)> entries)
+        {
+            if (await context.Reviews.AnyAsync(r => r.BarbershopId == barbershopId)) return;
+
+            foreach (var (user, rating, comment, createdAt) in entries)
+            {
+                if (user == null) continue;
+                context.Reviews.Add(new Review
+                {
+                    UserId       = user.Id,
+                    BarbershopId = barbershopId,
+                    Rating       = rating,
+                    Comment      = comment,
+                    CreatedAt    = createdAt
+                });
+            }
+
+            await context.SaveChangesAsync();
         }
 
         // ── Service Generator for Apify-sourced providers ────────────────────────
@@ -401,13 +607,13 @@ namespace WebApplication1.Data
             var services = new List<Service>();
             if (isSalon)
             {
-                services.Add(new Service { Name = "Corte Feminino", Description = "Corte e lavagem especializada para senhora", Price = 25.00m, DurationMinutes = 45, IsAvailable = true, BarbershopId = barbershopId, IsMobile = true, TargetGender = TargetGender.Female });
-                services.Add(new Service { Name = "Corte Masculino", Description = "Corte e estilização clássica de homem", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershopId, IsMobile = true, TargetGender = TargetGender.Male });
+                services.Add(new Service { Name = "Corte Feminino",  Description = "Corte e lavagem especializada para senhora", Price = 25.00m, DurationMinutes = 45, IsAvailable = true, BarbershopId = barbershopId, IsMobile = true,  TargetGender = TargetGender.Female });
+                services.Add(new Service { Name = "Corte Masculino", Description = "Corte e estilização clássica de homem",      Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershopId, IsMobile = true,  TargetGender = TargetGender.Male });
             }
             else
             {
-                services.Add(new Service { Name = "Corte de Cabelo", Description = "Corte moderno ou clássico", Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershopId, IsMobile = true, TargetGender = TargetGender.Male });
-                services.Add(new Service { Name = "Aparar Barba", Description = "Barba tradicional com toalha quente", Price = 10.00m, DurationMinutes = 20, IsAvailable = true, BarbershopId = barbershopId, IsMobile = false, TargetGender = TargetGender.Male });
+                services.Add(new Service { Name = "Corte de Cabelo", Description = "Corte moderno ou clássico",                 Price = 15.00m, DurationMinutes = 30, IsAvailable = true, BarbershopId = barbershopId, IsMobile = true,  TargetGender = TargetGender.Male });
+                services.Add(new Service { Name = "Aparar Barba",    Description = "Barba tradicional com toalha quente",       Price = 10.00m, DurationMinutes = 20, IsAvailable = true, BarbershopId = barbershopId, IsMobile = false, TargetGender = TargetGender.Male });
             }
             return services;
         }

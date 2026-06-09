@@ -76,6 +76,18 @@ namespace WebApplication1.Data
             builder.Entity<BarberShopPlace>()
                 .HasIndex(b => b.PlaceId)
                 .IsUnique();
+
+            // Store BarbershopCategory as int — explicit mapping for clarity and migration stability.
+            // Default value ensures existing rows without Category stay as Barbershop (0) after migration.
+            builder.Entity<BarberShopPlace>()
+                .Property(b => b.Category)
+                .HasConversion<int>()
+                .HasDefaultValue(BarbershopCategory.Barbershop);
+
+            // Composite index for filtered map queries (category + rating)
+            builder.Entity<BarberShopPlace>()
+                .HasIndex(b => new { b.Category, b.Rating })
+                .HasDatabaseName("IX_BarberShopPlaces_Category_Rating");
         }
     }
 }

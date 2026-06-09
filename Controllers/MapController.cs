@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
+using WebApplication1.Models;
 using WebApplication1.Models.GooglePlaces;
 using WebApplication1.Models.ViewModels;
 using WebApplication1.Services;
@@ -14,6 +15,9 @@ namespace WebApplication1.Controllers
     ///   - Serve the initial map view pre-populated with <see cref="BarberShopPlace"/> seed records.
     ///   - Provide an AJAX endpoint (<c>GET /Map/Details</c>) that the JS calls on marker click
     ///     to retrieve full place details without redirecting to Google Maps.
+    ///   - Determine Demo Mode: when <c>Google:PlacesApiKey</c> is absent/empty or
+    ///     <c>Google:DemoMode = true</c> is set explicitly, all live API calls are skipped
+    ///     and local seed / mock data is used instead.
     /// </summary>
     public class MapController : Controller
     {
@@ -34,17 +38,38 @@ namespace WebApplication1.Controllers
             _logger = logger;
         }
 
+        // ── Demo Mode Helper ───────────────────────────────────────────────────
+        // Centralised logic: demo mode when no valid API key is present OR
+        // the operator has explicitly forced it via Google:DemoMode = true.
+
+        private bool ResolveDemoMode()
+        {
+            // Explicit override takes priority
+            if (_config.GetValue<bool>("Google:DemoMode"))
+                return true;
+
+            // Absent or whitespace-only API key → demo mode
+            var key = _config["Google:PlacesApiKey"]
+                   ?? _config["Google:ApiKey"]
+                   ?? _config["GoogleMaps:ApiKey"]
+                   ?? string.Empty;
+
+            return string.IsNullOrWhiteSpace(key);
+        }
+
         // GET /Map  or  GET /Map/Index
         // Renders the map view with all BarberShopPlace records serialised into the JS variable.
         // The Google Maps API key is passed via the ViewModel — it is injected into the <script src> tag
         // server-side and never written into client-visible JSON.
         public async Task<IActionResult> Index()
         {
-            // Read API key from config — try both key paths for compatibility with existing config
-            var apiKey = _config["GoogleMaps:ApiKey"]
-                      ?? _config["Google:PlacesApiKey"]
-                      ?? _config["Google:ApiKey"]
-                      ?? string.Empty;
+            var isDemoMode = ResolveDemoMode();
+
+            // Read Maps JS API key (separate from Places API key — used only for the tile layer if ever switched)
+            var mapsApiKey = _config["GoogleMaps:ApiKey"]
+                          ?? _config["Google:PlacesApiKey"]
+                          ?? _config["Google:ApiKey"]
+                          ?? string.Empty;
 
             // Fetch all seeded / cached BarberShopPlace records from the DB
             var places = await _context.BarberShopPlaces
@@ -52,28 +77,31 @@ namespace WebApplication1.Controllers
                 .OrderByDescending(p => p.Rating)
                 .ToListAsync();
 
-            // Map entity → ViewModel (the ViewModel handles PhotoUrl construction)
+            // Map entity → ViewModel — Category is now stored on BarberShopPlace, so no join needed
             var shopViewModels = places.Select(p => new BarberShopPlaceViewModel
             {
-                PlaceId        = p.PlaceId,
-                Name           = p.Name,
-                Address        = p.Address,
-                PhoneNumber    = p.PhoneNumber,
-                Website        = p.Website,
-                Rating         = p.Rating,
+                PlaceId          = p.PlaceId,
+                Name             = p.Name,
+                Address          = p.Address,
+                PhoneNumber      = p.PhoneNumber,
+                Website          = p.Website,
+                Rating           = p.Rating,
                 UserRatingsTotal = p.UserRatingsTotal,
-                Lat            = p.Latitude,
-                Lng            = p.Longitude,
+                Lat              = p.Latitude,
+                Lng              = p.Longitude,
                 OpeningHoursJson = p.OpeningHoursJson,
-                PhotoReference = p.PhotoReference
+                PhotoReference   = p.PhotoReference,
+                Category         = p.Category.ToString(),   // "Barbershop" | "HairSalon" | "Unisex"
+                IsDemoMode       = isDemoMode
             });
 
             var viewModel = new MapPageViewModel
             {
                 NearbyShops      = shopViewModels,
-                GoogleMapsApiKey = apiKey,
+                GoogleMapsApiKey = mapsApiKey,
                 DefaultLatitude  = 38.7169,
-                DefaultLongitude = -9.1399
+                DefaultLongitude = -9.1399,
+                IsDemoMode       = isDemoMode
             };
 
             return View(viewModel);
@@ -83,6 +111,8 @@ namespace WebApplication1.Controllers
         // AJAX-only endpoint called by Map/Index.cshtml JS when the user clicks a BarberShopPlace marker.
         // Fetches the Barbershop record from DB by integer ID, calls GooglePlacesService for live data,
         // and returns a fully consolidated BarbershopDetailsViewModel as JSON.
+        // In Demo Mode: uses local DB Review records as the primary review source; falls back to
+        // random mock text only when no DB reviews exist.
         // Never redirects. Google API key never leaves the server.
         [HttpGet]
         public async Task<IActionResult> GetDetails(int id)
@@ -94,6 +124,7 @@ namespace WebApplication1.Controllers
             if (barbershop == null)
                 return NotFound(new { success = false, message = "Barbearia não encontrada." });
 
+            var isDemoMode = ResolveDemoMode();
             PlaceDetailsResult? googleData = null;
 
             if (!string.IsNullOrWhiteSpace(barbershop.PlaceId))
@@ -108,8 +139,9 @@ namespace WebApplication1.Controllers
                 }
             }
 
-            // Resolve photo proxy URLs server-side — API key never sent to client
-            var photos = (googleData?.Photos ?? new List<WebApplication1.Models.GooglePlaces.PlacePhoto>())
+            // ── Resolve photos ─────────────────────────────────────────────────
+            // Proxy URLs resolved server-side — API key never sent to client
+            var photos = (googleData?.Photos ?? new List<PlacePhoto>())
                 .Select((p, i) => new PlacePhotoViewModel
                 {
                     Index    = i,
@@ -118,17 +150,61 @@ namespace WebApplication1.Controllers
                     Height   = p.Height
                 }).ToList();
 
-            var reviews = (googleData?.Reviews ?? new List<WebApplication1.Models.GooglePlaces.PlaceReview>())
-                .Select(r => new PlaceReviewViewModel
-                {
-                    AuthorName              = r.AuthorName,
-                    ProfilePhotoUrl         = r.ProfilePhotoUrl,
-                    Rating                  = r.Rating,
-                    RelativeTimeDescription = r.RelativeTimeDescription,
-                    Text                    = r.Text
-                }).ToList();
+            // ── Resolve reviews ────────────────────────────────────────────────
+            // Priority: local DB Reviews → Google API reviews → random mock
+            List<PlaceReviewViewModel> reviews;
 
-            // Check favourited state for authenticated users
+            if (isDemoMode || (googleData?.IsMockData == true))
+            {
+                // Prefer deterministic local DB reviews for a better demo experience
+                var dbReviews = await _context.Reviews
+                    .AsNoTracking()
+                    .Include(r => r.User)
+                    .Where(r => r.BarbershopId == barbershop.Id)
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Take(5)
+                    .ToListAsync();
+
+                if (dbReviews.Any())
+                {
+                    reviews = dbReviews.Select(r => new PlaceReviewViewModel
+                    {
+                        AuthorName              = r.User?.FullName ?? "Utilizador",
+                        ProfilePhotoUrl         = null,
+                        Rating                  = r.Rating,
+                        RelativeTimeDescription = FormatRelativeTime(r.CreatedAt),
+                        Text                    = r.Comment
+                    }).ToList();
+                }
+                else
+                {
+                    // No DB reviews → fall through to whatever the service returned (random mock)
+                    reviews = (googleData?.Reviews ?? new List<PlaceReview>())
+                        .Select(r => new PlaceReviewViewModel
+                        {
+                            AuthorName              = r.AuthorName,
+                            ProfilePhotoUrl         = r.ProfilePhotoUrl,
+                            Rating                  = r.Rating,
+                            RelativeTimeDescription = r.RelativeTimeDescription,
+                            Text                    = r.Text
+                        }).ToList();
+                }
+            }
+            else
+            {
+                // Live mode: use Google API reviews directly
+                reviews = (googleData?.Reviews ?? new List<PlaceReview>())
+                    .Select(r => new PlaceReviewViewModel
+                    {
+                        AuthorName              = r.AuthorName,
+                        ProfilePhotoUrl         = r.ProfilePhotoUrl,
+                        Rating                  = r.Rating,
+                        RelativeTimeDescription = r.RelativeTimeDescription,
+                        Text                    = r.Text
+                    }).ToList();
+            }
+
+            // ── Check favourited state for authenticated users ──────────────────
             var isFavourited = false;
             if (User.Identity?.IsAuthenticated == true)
             {
@@ -163,7 +239,7 @@ namespace WebApplication1.Controllers
                 WeekdayText       = googleData?.OpeningHours?.WeekdayText ?? new List<string>(),
                 Photos            = photos,
                 Reviews           = reviews,
-                IsMockData        = googleData?.IsMockData ?? false,
+                IsMockData        = isDemoMode || (googleData?.IsMockData ?? false),
                 IsFavourited      = isFavourited
             };
 
@@ -173,6 +249,7 @@ namespace WebApplication1.Controllers
                 id                   = viewModel.Id,
                 googlePlaceId        = viewModel.GooglePlaceId,
                 isMock               = viewModel.IsMockData,
+                isDemoMode           = isDemoMode,
                 name                 = viewModel.Name,
                 description          = viewModel.Description,
                 formattedAddress     = viewModel.Address,
@@ -201,6 +278,8 @@ namespace WebApplication1.Controllers
             if (string.IsNullOrWhiteSpace(placeId))
                 return BadRequest(new { success = false, message = "placeId é obrigatório." });
 
+            var isDemoMode = ResolveDemoMode();
+
             try
             {
                 var result = await _placesService.GetFullPlaceDetailsAsync(placeId);
@@ -221,7 +300,8 @@ namespace WebApplication1.Controllers
                 return Json(new
                 {
                     success              = true,
-                    isMock               = result.IsMockData,
+                    isMock               = result.IsMockData || isDemoMode,
+                    isDemoMode           = isDemoMode,
                     placeId              = result.PlaceId,
                     name                 = result.Name,
                     formattedAddress     = result.FormattedAddress,
@@ -248,6 +328,28 @@ namespace WebApplication1.Controllers
                 _logger.LogError(ex, "MapController.Details failed for placeId {PlaceId}.", placeId);
                 return StatusCode(500, new { success = false, message = "Erro interno ao carregar detalhes." });
             }
+        }
+
+        // ── Private helpers ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Converts an absolute <see cref="DateTime"/> to a human-readable Portuguese relative string,
+        /// e.g. "há 3 dias", "há 2 semanas", "há 1 mês".
+        /// </summary>
+        private static string FormatRelativeTime(DateTime createdAt)
+        {
+            var delta = DateTime.Now - createdAt;
+            return delta.TotalDays switch
+            {
+                < 1    => "hoje",
+                < 2    => "ontem",
+                < 7    => $"há {(int)delta.TotalDays} dias",
+                < 14   => "há 1 semana",
+                < 30   => $"há {(int)(delta.TotalDays / 7)} semanas",
+                < 60   => "há 1 mês",
+                < 365  => $"há {(int)(delta.TotalDays / 30)} meses",
+                _      => $"há {(int)(delta.TotalDays / 365)} anos"
+            };
         }
     }
 }
