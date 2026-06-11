@@ -502,6 +502,10 @@ function setupFavouriteButton(d) {
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);   // FIX: replace btn with newBtn (not newBtn with itself)
 
+    // Resolve the place ID from the data object first (works in both Google Maps and Leaflet contexts),
+    // then fall back to the module-scope currentPlaceId (set by handleMarkerClick on the Google Maps page).
+    const resolvedPlaceId = d.placeId || d.googlePlaceId || currentPlaceId;
+
     const updateFavBtn = (isFav) => {
         newBtn.dataset.fav = isFav ? 'true' : 'false';
         const ic = newBtn.querySelector('i');
@@ -526,7 +530,7 @@ function setupFavouriteButton(d) {
                     'RequestVerificationToken': token
                 },
                 body: JSON.stringify({
-                    placeId:      currentPlaceId,
+                    placeId:      resolvedPlaceId,
                     placeName:    d.name,
                     placeAddress: d.formattedAddress
                 })

@@ -1,48 +1,335 @@
-@model IEnumerable<WebApplication1.Models.Barbershop>
-
 @{
-    ViewData["Title"] = "Barbearias";
+    ViewData["Title"] = "Barbearias - Live Map";
+    var googleApiKey = ViewData["GoogleApiKey"] as string ?? string.Empty;
 }
 
-<div class="container my-5">
-    <div class="row mb-4">
-        <div class="col-12 text-center">
-            <h1 class="section-title"><i class="fas fa-scissors text-primary"></i> Sobre o BarberLoc</h1>
-            <p class="lead mt-2">O BarberLoc ajuda-o a encontrar, reservar e gerir serviços de barbearia e cabeleireiro perto de si — de forma rápida e confiável.</p>
+<style>
+    /* Full height layout minus navbar */
+    body {
+        overflow: hidden; /* prevent body scroll, handle scroll in sidebar */
+    }
+    .split-container {
+        display: flex;
+        height: calc(100vh - 56px); /* Adjust based on your navbar height */
+        width: 100%;
+    }
+    .sidebar {
+        width: 400px;
+        min-width: 400px;
+        overflow-y: auto;
+        background: #f8f9fa;
+        padding: 1rem;
+        border-right: 1px solid #ddd;
+        z-index: 10;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+    .map-container {
+        flex-grow: 1;
+        position: relative;
+    }
+    #map {
+        width: 100%;
+        height: 100%;
+    }
+    .place-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+    }
+    .place-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+    }
+</style>
+
+<div class="split-container">
+    <!-- Left Sidebar: List of Places -->
+    <div class="sidebar" id="sidebar-content">
+        <h4 class="mb-3"><i class="fas fa-cut text-primary"></i> Barbearias Locais</h4>
+        <div id="loading-spinner" class="text-center my-4 d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">A pesquisar locais na área...</p>
+        </div>
+        <div id="places-list" class="d-flex flex-column gap-3">
+            <p class="text-muted text-center my-5">Mova o mapa para ver as barbearias e salões perto de si.</p>
         </div>
     </div>
 
-    <div class="row g-4">
-        <div class="col-md-8 offset-md-2">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h4 class="mb-3">O que pode fazer com esta aplicação</h4>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><i class="fas fa-map-marker-alt text-accent me-2"></i><strong>Localizar</strong> barbearias e cabeleireiros na sua área com mapas e direcções.</li>
-                        <li class="mb-2"><i class="fas fa-calendar-plus text-accent me-2"></i><strong>Reservar</strong> um horário para o serviço que pretende, com confirmação pela barbearia.</li>
-                        <li class="mb-2"><i class="fas fa-motorcycle text-accent me-2"></i><strong>Serviço ao domicílio</strong> disponível quando indicado pela barbearia (taxa extra aplicável).</li>
-                        <li class="mb-2"><i class="fas fa-star text-accent me-2"></i><strong>Avaliações</strong> para ajudar a escolher o melhor profissional.</li>
-                        <li class="mb-2"><i class="fas fa-user-cog text-accent me-2"></i><strong>Gestão de perfil</strong> para atualizar os seus dados e contactos.</li>
-                    </ul>
+    <!-- Right Side: Google Map -->
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+</div>
 
-                    <h5 class="mt-4">Como começar</h5>
-                    <ol>
-                        <li>Crie uma conta ou entre com Google.</li>
-                        <li>Pesquise por barbearias ou navegue pelo mapa.</li>
-                        <li>Escolha um serviço, seleccione data e hora e confirme a reserva.</li>
-                    </ol>
+<!-- Place Details Modal -->
+<div class="modal fade" id="placeModal" tabindex="-1" aria-labelledby="placeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="placeModalLabel">Detalhes do Local</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="placeModalBody">
+          <div class="text-center py-5" id="modal-loading">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-2 text-muted">A carregar detalhes ao vivo...</p>
+          </div>
+          <div id="modal-content" class="d-none">
+              <!-- Content injected via JS -->
+          </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-                    <h5 class="mt-4">Ajuda e contacto</h5>
-                    <p class="text-muted">Se tiver problemas ou dúvidas, contacte-nos através do email <a href="mailto:support@barberloc.example">support@barberloc.example</a> ou visite a secção de perfil para actualizar os seus dados.</p>
+@section Scripts {
+    <script>
+        let map;
+        let markers = [];
+        let modalInstance;
 
-                    <div class="d-flex gap-2 mt-3">
-                        <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary">Voltar à Página Inicial</a>
-                        <a asp-action="Map" asp-controller="Barbershops" class="btn btn-primary">Ver Mapa</a>
+        function initMap() {
+            // Setup Modal
+            const modalEl = document.getElementById('placeModal');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                modalInstance = new bootstrap.Modal(modalEl);
+            }
+
+            // Init Map strictly at Zoom 14 in Lisbon area
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 14,
+                center: { lat: 38.7223, lng: -9.1393 }, // Lisbon area
+                mapTypeControl: false,
+                streetViewControl: false,
+                clickableIcons: false
+            });
+
+            // Fetch live data on map idle (panning/zooming stops)
+            map.addListener('idle', () => {
+                fetchLiveMarkers();
+            });
+        }
+
+        async function fetchLiveMarkers() {
+            const center = map.getCenter();
+            const lat = center.lat();
+            const lng = center.lng();
+            
+            // Calculate a rough radius based on zoom level, max 50km
+            const zoom = map.getZoom();
+            let radius = Math.floor(40000000 / Math.pow(2, zoom));
+            radius = Math.min(Math.max(radius, 500), 50000);
+
+            document.getElementById('loading-spinner').classList.remove('d-none');
+            document.getElementById('places-list').innerHTML = '';
+
+            try {
+                const response = await fetch(`/Barbershops/GetLiveMarkers?lat=${lat}&lng=${lng}&radius=${radius}`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const places = await response.json();
+                
+                renderData(places);
+            } catch (error) {
+                console.error("Error fetching live markers:", error);
+                document.getElementById('places-list').innerHTML = '<p class="text-danger text-center">Erro ao carregar os dados.</p>';
+            } finally {
+                document.getElementById('loading-spinner').classList.add('d-none');
+            }
+        }
+
+        function renderData(places) {
+            // Clear existing markers
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+
+            const listContainer = document.getElementById('places-list');
+            listContainer.innerHTML = '';
+
+            if (!places || places.length === 0) {
+                listContainer.innerHTML = '<p class="text-muted text-center my-5">Nenhuma barbearia encontrada nesta área.</p>';
+                return;
+            }
+
+            places.forEach(place => {
+                // Render Map Marker
+                const marker = new google.maps.Marker({
+                    position: { lat: place.lat, lng: place.lng },
+                    map: map,
+                    title: place.name,
+                    label: {
+                        text: place.rating ? place.rating.toFixed(1) : '?',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                        fontSize: '12px'
+                    },
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: '#0d6efd',
+                        fillOpacity: 1,
+                        strokeColor: '#fff',
+                        strokeWeight: 2,
+                        scale: 14
+                    }
+                });
+
+                marker.addListener('click', () => {
+                    openPlaceDetails(place.placeId);
+                });
+
+                markers.push(marker);
+
+                // Render Sidebar Card
+                const card = document.createElement('div');
+                card.className = 'card shadow-sm place-card';
+                card.onclick = () => {
+                    map.panTo({ lat: place.lat, lng: place.lng });
+                    openPlaceDetails(place.placeId);
+                };
+                
+                const starsHtml = renderStars(place.rating);
+
+                card.innerHTML = `
+                    <div class="card-body">
+                        <h6 class="card-title fw-bold text-primary mb-1">${escapeHtml(place.name)}</h6>
+                        <p class="card-text small text-muted mb-2"><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(place.address)}</p>
+                        <div class="d-flex align-items-center">
+                            <span class="me-2">${starsHtml}</span>
+                            <span class="small fw-semibold">${place.rating ? place.rating.toFixed(1) : '-'}</span>
+                            <span class="small text-muted ms-1">(${place.userRatingsTotal || 0})</span>
+                        </div>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        async function openPlaceDetails(placeId) {
+            if (!placeId) return;
+            if (modalInstance) modalInstance.show();
+            
+            document.getElementById('modal-loading').classList.remove('d-none');
+            document.getElementById('modal-content').classList.add('d-none');
+
+            try {
+                // Call the existing PlaceDetails endpoint to get full live info
+                const response = await fetch(`/Barbershops/PlaceDetails?placeId=${encodeURIComponent(placeId)}`);
+                if (!response.ok) throw new Error('Failed to fetch details');
+                
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message);
+
+                populateModal(data);
+            } catch (error) {
+                console.error("Error fetching place details:", error);
+                document.getElementById('modal-loading').classList.add('d-none');
+                document.getElementById('modal-content').innerHTML = '<div class="alert alert-danger">Erro ao carregar detalhes deste local.</div>';
+                document.getElementById('modal-content').classList.remove('d-none');
+            }
+        }
+
+        function populateModal(data) {
+            document.getElementById('placeModalLabel').textContent = data.name;
+
+            const isOpenBadge = data.isOpenNow === true 
+                ? '<span class="badge bg-success mb-2">Aberto Agora</span>' 
+                : (data.isOpenNow === false ? '<span class="badge bg-danger mb-2">Fechado</span>' : '');
+
+            let hoursHtml = '';
+            if (data.weekdayText && data.weekdayText.length > 0) {
+                hoursHtml = '<h6 class="mt-3 fw-bold">Horário de Funcionamento</h6><ul class="list-group list-group-flush small mb-3">';
+                data.weekdayText.forEach(day => {
+                    hoursHtml += `<li class="list-group-item px-0 py-1">${escapeHtml(day)}</li>`;
+                });
+                hoursHtml += '</ul>';
+            }
+
+            let photosHtml = '';
+            if (data.photos && data.photos.length > 0) {
+                photosHtml = '<h6 class="fw-bold">Fotos ao vivo</h6><div class="d-flex overflow-auto gap-2 mb-3 pb-2">';
+                data.photos.slice(0, 5).forEach(photo => {
+                    photosHtml += `<img src="${escapeHtml(photo.proxyUrl)}" class="rounded shadow-sm" style="height: 120px; width: auto; object-fit: cover;">`;
+                });
+                photosHtml += '</div>';
+            }
+
+            let reviewsHtml = '';
+            if (data.reviews && data.reviews.length > 0) {
+                reviewsHtml = '<h6 class="fw-bold">Avaliações do Google</h6><div class="list-group mb-3">';
+                data.reviews.forEach(r => {
+                    reviewsHtml += `
+                        <div class="list-group-item px-0 border-0 border-bottom pb-2 mb-2">
+                            <div class="d-flex align-items-center mb-1">
+                                <img src="${escapeHtml(r.profilePhotoUrl || 'https://via.placeholder.com/32')}" class="rounded-circle me-2" width="24" height="24">
+                                <span class="fw-semibold small">${escapeHtml(r.authorName)}</span>
+                                <span class="ms-auto text-warning small">${renderStars(r.rating)}</span>
+                            </div>
+                            <p class="small text-muted mb-0">${escapeHtml(r.text)}</p>
+                            <small class="text-secondary" style="font-size: 10px;">${escapeHtml(r.relativeTimeDescription)}</small>
+                        </div>
+                    `;
+                });
+                reviewsHtml += '</div>';
+            }
+
+            const phoneHtml = data.formattedPhoneNumber 
+                ? `<p class="mb-1"><i class="fas fa-phone text-muted me-2"></i><a href="tel:${data.formattedPhoneNumber}">${escapeHtml(data.formattedPhoneNumber)}</a></p>` 
+                : '';
+            
+            const webHtml = data.website 
+                ? `<p class="mb-3"><i class="fas fa-globe text-muted me-2"></i><a href="${escapeHtml(data.website)}" target="_blank" rel="noopener noreferrer">Website Oficial</a></p>` 
+                : '';
+
+            const contentHtml = `
+                <div class="row">
+                    <div class="col-md-6">
+                        ${isOpenBadge}
+                        <p class="mb-2"><i class="fas fa-map-marker-alt text-muted me-2"></i>${escapeHtml(data.formattedAddress)}</p>
+                        ${phoneHtml}
+                        ${webHtml}
+                        ${hoursHtml}
+                    </div>
+                    <div class="col-md-6">
+                        ${photosHtml}
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        ${reviewsHtml}
+                    </div>
+                </div>
+            `;
 
+            document.getElementById('modal-content').innerHTML = contentHtml;
+            document.getElementById('modal-loading').classList.add('d-none');
+            document.getElementById('modal-content').classList.remove('d-none');
+        }
 
-</div>
+        function renderStars(rating) {
+            if (!rating) return '<span class="text-muted">Sem avaliações</span>';
+            let html = '<span class="text-warning">';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= Math.floor(rating)) html += '<i class="fas fa-star"></i>';
+                else if (i === Math.ceil(rating) && rating % 1 >= 0.5) html += '<i class="fas fa-star-half-alt"></i>';
+                else html += '<i class="far fa-star"></i>';
+            }
+            html += '</span>';
+            return html;
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.toString()
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+    </script>
+    
+    @if (!string.IsNullOrWhiteSpace(googleApiKey))
+    {
+        <script src="https://maps.googleapis.com/maps/api/js?key=@googleApiKey&callback=initMap" async defer></script>
+    }
+}

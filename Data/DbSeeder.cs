@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Models;
+using WebApplication1.Services;
 
 namespace WebApplication1.Data
 {
     public static class DbSeeder
     {
-        public static async Task SeedAsync(IConfiguration config, ApplicationDbContext context, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager)
+        public static async Task SeedAsync(IConfiguration config, ApplicationDbContext context, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IGooglePlacesService? googlePlacesService = null)
         {
             // Seed Roles
             if (!await roleManager.RoleExistsAsync("Admin")) await roleManager.CreateAsync(new IdentityRole("Admin"));
@@ -75,6 +76,12 @@ namespace WebApplication1.Data
                                 {
                                     var isSalon = (place.title ?? "").ToLower().Contains("salon") || (place.title ?? "").ToLower().Contains("cabeleireiro");
 
+                                    // GooglePlaceId: prefer the API-supplied placeId; synthesise a mock ID
+                                    // when the Apify dataset omits it so the NOT NULL constraint is satisfied.
+                                    var googlePlaceId = !string.IsNullOrWhiteSpace(place.placeId)
+                                        ? place.placeId
+                                        : $"ChIJApify_{(place.title ?? "place").Replace(" ", "_")[..Math.Min(20, (place.title ?? "place").Length)]}_{Guid.NewGuid():N}"[..Math.Min(100, 100)];
+
                                     var barbershop = new Barbershop
                                     {
                                         Name          = place.title ?? "Barbearia",
@@ -86,9 +93,12 @@ namespace WebApplication1.Data
                                         ImageUrl      = place.imageUrl,
                                         AverageRating = place.totalScore ?? 0,
                                         PlaceId       = place.placeId,
+                                        GooglePlaceId = googlePlaceId,
+                                        Rating        = place.totalScore,
                                         Category      = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
                                         IsActive      = true,
-                                        CreatedAt     = DateTime.Now
+                                        CreatedAt     = DateTime.Now,
+                                        UpdatedAt     = DateTime.Now
                                     };
 
                                     context.Barbershops.Add(barbershop);
@@ -103,8 +113,71 @@ namespace WebApplication1.Data
                         }
                     }
 
-                    // ── Hardcoded fallback: seed rich demo providers if Apify unavailable ─
-                    if (!apifySeeded)
+                    // ── Live Google Places seeding: prefer real-time data when API key present ─
+                    var apiKey = config["Google:PlacesApiKey"] ?? config["Google:ApiKey"];
+                    var liveSeeded = false;
+
+                    if (!string.IsNullOrWhiteSpace(apiKey) && googlePlacesService != null)
+                    {
+                        try
+                        {
+                            // Default seed area: Lisbon centre
+                            var lat = 38.7169;
+                            var lng = -9.1399;
+                            var radius = 5000; // 5km
+
+                            var places = await googlePlacesService.FetchLiveBarbershopsAsync(lat, lng, radius);
+                            if (places != null && places.Count > 0)
+                            {
+                                // Insert top N unique places into Barbershop table
+                                var top = places.Take(12);
+                                foreach (var p in top)
+                                {
+                                    if (string.IsNullOrWhiteSpace(p.PlaceId)) continue;
+
+                                    var exists = await context.Barbershops.AnyAsync(b => b.GooglePlaceId == p.PlaceId);
+                                    if (exists) continue;
+
+                                    var isSalon = (p.Name ?? "").ToLower().Contains("salon") || (p.Name ?? "").ToLower().Contains("cabeleireiro");
+
+                                    var barbershop = new Barbershop
+                                    {
+                                        Name = p.Name ?? "Barbearia",
+                                        Description = !string.IsNullOrEmpty(p.Address) ? p.Address : null,
+                                        Address = p.Address ?? "Endereço indisponível",
+                                        Latitude = p.Lat,
+                                        Longitude = p.Lng,
+                                        PhoneNumber = null,
+                                        ImageUrl = null,
+                                        AverageRating = p.Rating ?? 0,
+                                        GooglePlaceId = p.PlaceId,
+                                        Category = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
+                                        IsActive = true,
+                                        CreatedAt = DateTime.Now,
+                                        UpdatedAt = DateTime.Now
+                                    };
+
+                                    context.Barbershops.Add(barbershop);
+                                    await context.SaveChangesAsync();
+
+                                    // Add default services for new provider
+                                    var services = GetServicesForCategory(barbershop.Id, isSalon);
+                                    context.Services.AddRange(services);
+                                    await context.SaveChangesAsync();
+                                }
+
+                                liveSeeded = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[DbSeeder] Live seeding failed: {ex.Message}");
+                            liveSeeded = false;
+                        }
+                    }
+
+                    // If neither Apify nor Live seeding occurred, fallback to hardcoded providers
+                    if (!apifySeeded && !liveSeeded)
                     {
                         await SeedFallbackProvidersAsync(context, sampleUser, reviewer2, reviewer3);
                     }
@@ -124,7 +197,11 @@ namespace WebApplication1.Data
             await SeedFavouritePlacesAsync(context, sampleUser);
 
             // ── Seed BarberShopPlaces (Google Places cache / map markers) ─────────
-            await SeedBarberShopPlacesAsync(context);
+            // Pass IConfiguration so the seeder can detect API keys and configuration values
+            await SeedBarberShopPlacesAsync(context, config);
+
+            // ── Seed additional Barbershop provider records (idempotent by PlaceId) ─
+            await SeedAdditionalBarbershopsAsync(context, sampleUser, reviewer2, reviewer3);
         }
 
         // ── Synthetic reviewer helper ────────────────────────────────────────────
@@ -163,14 +240,29 @@ namespace WebApplication1.Data
 
         // ── Seed BarberShopPlaces (map markers cache table) ─────────────────────
 
-        private static async Task SeedBarberShopPlacesAsync(ApplicationDbContext context)
+        private static async Task SeedBarberShopPlacesAsync(ApplicationDbContext context, IConfiguration config)
         {
-            // Idempotent — skip if we already have the full set of 8 records
-            if (await context.BarberShopPlaces.CountAsync() >= 8) return;
+            // When a live Google Places API key is configured, skip inserting mock PlaceIds.
+            // The GetLiveMarkers endpoint will populate BarberShopPlaces with real data on first map pan.
+            // We still seed if the table is empty AND no API key is present, so the map is never blank.
+            var apiKey = config["Google:PlacesApiKey"] ?? config["Google:ApiKey"] ?? string.Empty;
+            var hasLiveKey = !string.IsNullOrWhiteSpace(apiKey);
 
-            // Remove any partial seed to avoid unique-index violations on PlaceId
-            context.BarberShopPlaces.RemoveRange(context.BarberShopPlaces);
-            await context.SaveChangesAsync();
+            if (hasLiveKey)
+            {
+                // Live mode: only seed if the table is completely empty (i.e. first-ever run).
+                // Once GetLiveMarkers fires, real ChIJ... PlaceIds replace these as the primary data source.
+                if (await context.BarberShopPlaces.AnyAsync()) return;
+            }
+            else
+            {
+                // No-key mode: ensure we have at least the full 12-record fallback set.
+                if (await context.BarberShopPlaces.CountAsync() >= 12) return;
+
+                // Remove any partial seed to avoid unique-index violations on PlaceId
+                context.BarberShopPlaces.RemoveRange(context.BarberShopPlaces);
+                await context.SaveChangesAsync();
+            }
 
             // ── Shared opening-hours JSON strings ─────────────────────────────────
             var standardHoursJson = System.Text.Json.JsonSerializer.Serialize(new[]
@@ -361,6 +453,78 @@ namespace WebApplication1.Data
                     PhotoReference   = null,
                     Category         = BarbershopCategory.Barbershop,
                     LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 9: Barbearia do Intendente (Lisboa, Intendente/Mouraria) ────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJBarbershopMockIntendente009",
+                    Name             = "Barbearia do Intendente",
+                    Address          = "Largo do Intendente Pina Manique 12, 1100-285 Lisboa",
+                    PhoneNumber      = "+351 21 000 9999",
+                    Website          = "https://www.barbeariadointendente.pt",
+                    Rating           = 4.6,
+                    UserRatingsTotal = 127,
+                    Latitude         = 38.7187,
+                    Longitude        = -9.1327,
+                    OpeningHoursJson = standardHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Barbershop,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 10: Salão Belém Premium (Lisboa, Belém) ──────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJHairSalonMockBelem010",
+                    Name             = "Salão Belém Premium",
+                    Address          = "Rua de Belém 22, 1300-085 Lisboa",
+                    PhoneNumber      = "+351 21 000 1010",
+                    Website          = "https://www.salaobelem.pt",
+                    Rating           = 4.4,
+                    UserRatingsTotal = 61,
+                    Latitude         = 38.6966,
+                    Longitude        = -9.2049,
+                    OpeningHoursJson = eleganceHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.HairSalon,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 11: CutStyle Odivelas ────────────────────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJBarbershopMockOdivelas011",
+                    Name             = "CutStyle Odivelas",
+                    Address          = "Av. Amália Rodrigues 5, 2675-309 Odivelas",
+                    PhoneNumber      = "+351 21 933 1111",
+                    Website          = null,
+                    Rating           = 4.3,
+                    UserRatingsTotal = 48,
+                    Latitude         = 38.7924,
+                    Longitude        = -9.1816,
+                    OpeningHoursJson = braganoBraHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Barbershop,
+                    LastFetchedAt    = DateTime.UtcNow
+                },
+
+                // ── 12: Unisex Hub Almada ────────────────────────────────────────────────
+                new BarberShopPlace
+                {
+                    PlaceId          = "ChIJUnisexMockAlmada012",
+                    Name             = "Unisex Hub Almada",
+                    Address          = "Praça Gil Vicente 3, 2800-159 Almada",
+                    PhoneNumber      = "+351 21 274 1212",
+                    Website          = "https://www.unisexhub.pt",
+                    Rating           = 4.5,
+                    UserRatingsTotal = 89,
+                    Latitude         = 38.6741,
+                    Longitude        = -9.1576,
+                    OpeningHoursJson = urbanHoursJson,
+                    PhotoReference   = null,
+                    Category         = BarbershopCategory.Unisex,
+                    LastFetchedAt    = DateTime.UtcNow
                 }
             });
 
@@ -413,6 +577,100 @@ namespace WebApplication1.Data
             await context.SaveChangesAsync();
         }
 
+        // ── Additional Barbershop providers (idempotent by PlaceId) ───────────────
+        // Adds providers 4 and 5 if they are not already in the DB.
+        // Safe to run on existing databases — checks PlaceId existence before inserting.
+        private static async Task SeedAdditionalBarbershopsAsync(
+            ApplicationDbContext context,
+            ApplicationUser?     sampleUser,
+            ApplicationUser?     reviewer2,
+            ApplicationUser?     reviewer3)
+        {
+            // ── Provider 4: Barbearia do Intendente ──────────────────────────────
+            if (!await context.Barbershops.AnyAsync(b => b.PlaceId == "ChIJBarbershopMockIntendente009"))
+            {
+                var provider4 = new Barbershop
+                {
+                    Name          = "Barbearia do Intendente",
+                    Description   = "Barbearia de bairro no histórico Largo do Intendente. Cortes tradicionais e modernos num espaço acolhedor e autêntico.",
+                    Address       = "Largo do Intendente Pina Manique 12, 1100-285 Lisboa",
+                    Latitude      = 38.7187,
+                    Longitude     = -9.1327,
+                    PhoneNumber   = "+351 21 000 9999",
+                    Email         = "intendente@barberloc.pt",
+                    OpeningHours  = "Seg-Sex: 09:00–20:00 | Sáb: 09:00–18:00",
+                    ImageUrl      = "https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80",
+                    AverageRating = 4.6,
+                    PlaceId       = "ChIJBarbershopMockIntendente009",
+                    GooglePlaceId = "ChIJBarbershopMockIntendente009",
+                    Rating        = 4.6,
+                    Category      = BarbershopCategory.Barbershop,
+                    IsActive      = true,
+                    CreatedAt     = DateTime.Now.AddMonths(-3),
+                    UpdatedAt     = DateTime.Now
+                };
+                context.Barbershops.Add(provider4);
+                await context.SaveChangesAsync();
+
+                context.Services.AddRange(new[]
+                {
+                    new Service { BarbershopId = provider4.Id, Name = "Corte de Cabelo",    Description = "Corte clássico ou moderno com acabamento perfeito.",          Price = 14.00m, DurationMinutes = 30, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Male },
+                    new Service { BarbershopId = provider4.Id, Name = "Barba Tradicional",  Description = "Barba à navalha com toalha quente e produtos premium.",        Price = 11.00m, DurationMinutes = 25, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Male },
+                    new Service { BarbershopId = provider4.Id, Name = "Corte + Barba",      Description = "Pack completo — corte e barba com desconto.",                   Price = 23.00m, DurationMinutes = 50, IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Male }
+                });
+                await context.SaveChangesAsync();
+
+                await SeedReviewsForShop(context, provider4.Id, new[]
+                {
+                    (sampleUser, 5, "Lugar incrível no Intendente! O barbeiro conhece bem o bairro e o trabalho é excelente.",          DateTime.Now.AddDays(-4)),
+                    (reviewer3,  4, "Ambiente muito autêntico, preços acessíveis e atendimento simpático. Voltarei com certeza.",        DateTime.Now.AddDays(-15)),
+                    (reviewer2,  5, "A melhor barba que fiz em Lisboa. Navalha limpa e produto de qualidade. 5 estrelas merecidas.",     DateTime.Now.AddDays(-28))
+                });
+            }
+
+            // ── Provider 5: Salão Belém Premium ─────────────────────────────────
+            if (!await context.Barbershops.AnyAsync(b => b.PlaceId == "ChIJHairSalonMockBelem010"))
+            {
+                var provider5 = new Barbershop
+                {
+                    Name          = "Salão Belém Premium",
+                    Description   = "Cabeleireiro premium junto ao mosteiro dos Jerónimos. Especialistas em coloração, cortes femininos e tratamentos capilares.",
+                    Address       = "Rua de Belém 22, 1300-085 Lisboa",
+                    Latitude      = 38.6966,
+                    Longitude     = -9.2049,
+                    PhoneNumber   = "+351 21 000 1010",
+                    Email         = "belem@barberloc.pt",
+                    OpeningHours  = "Ter-Sáb: 10:00–19:00 | Dom: 10:00–14:00",
+                    ImageUrl      = "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=800&q=80",
+                    AverageRating = 4.4,
+                    PlaceId       = "ChIJHairSalonMockBelem010",
+                    GooglePlaceId = "ChIJHairSalonMockBelem010",
+                    Rating        = 4.4,
+                    Category      = BarbershopCategory.HairSalon,
+                    IsActive      = true,
+                    CreatedAt     = DateTime.Now.AddMonths(-1),
+                    UpdatedAt     = DateTime.Now
+                };
+                context.Barbershops.Add(provider5);
+                await context.SaveChangesAsync();
+
+                context.Services.AddRange(new[]
+                {
+                    new Service { BarbershopId = provider5.Id, Name = "Corte Feminino Premium", Description = "Corte e styling com lavagem e máscara hidratante.",          Price = 32.00m, DurationMinutes = 60,  IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Female },
+                    new Service { BarbershopId = provider5.Id, Name = "Coloração Global",       Description = "Coloração completa com produtos sem amoníaco.",               Price = 70.00m, DurationMinutes = 120, IsAvailable = true, IsMobile = false, TargetGender = TargetGender.Female },
+                    new Service { BarbershopId = provider5.Id, Name = "Corte Masculino",        Description = "Corte clássico masculino com acabamento premium.",             Price = 18.00m, DurationMinutes = 30,  IsAvailable = true, IsMobile = true,  TargetGender = TargetGender.Male }
+                });
+                await context.SaveChangesAsync();
+
+                await SeedReviewsForShop(context, provider5.Id, new[]
+                {
+                    (reviewer2, 5, "O melhor salão de Belém! Coloração perfeita e o espaço é absolutamente lindo.",                    DateTime.Now.AddDays(-6)),
+                    (sampleUser, 4, "Serviço de qualidade, equipa simpática. Um pouco caro mas a localização e o resultado compensam.", DateTime.Now.AddDays(-20)),
+                    (reviewer3, 5, "Tratamento capilar fenomenal. Cabelo brilhante e hidratado durante semanas. Recomendo!",           DateTime.Now.AddDays(-33))
+                });
+            }
+        }
+
         // ── Fallback Hardcoded Seed Data ─────────────────────────────────────────
 
         private static async Task SeedFallbackProvidersAsync(
@@ -435,9 +693,12 @@ namespace WebApplication1.Data
                 ImageUrl      = "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&q=80",
                 AverageRating = 4.8,
                 PlaceId       = "ChIJBarbershopMockLisboa001",
+                GooglePlaceId = "ChIJBarbershopMockLisboa001",
+                Rating        = 4.8,
                 Category      = BarbershopCategory.Barbershop,
                 IsActive      = true,
-                CreatedAt     = DateTime.Now.AddMonths(-6)
+                CreatedAt     = DateTime.Now.AddMonths(-6),
+                UpdatedAt     = DateTime.Now
             };
             context.Barbershops.Add(provider1);
             await context.SaveChangesAsync();
@@ -472,9 +733,12 @@ namespace WebApplication1.Data
                 ImageUrl      = "https://images.unsplash.com/photo-1562322140-8baeececf3df?w=800&q=80",
                 AverageRating = 4.6,
                 PlaceId       = "ChIJHairSalonMockCascais002",
+                GooglePlaceId = "ChIJHairSalonMockCascais002",
+                Rating        = 4.6,
                 Category      = BarbershopCategory.HairSalon,
                 IsActive      = true,
-                CreatedAt     = DateTime.Now.AddMonths(-4)
+                CreatedAt     = DateTime.Now.AddMonths(-4),
+                UpdatedAt     = DateTime.Now
             };
             context.Barbershops.Add(provider2);
             await context.SaveChangesAsync();
@@ -509,9 +773,12 @@ namespace WebApplication1.Data
                 ImageUrl      = "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&q=80",
                 AverageRating = 4.5,
                 PlaceId       = "ChIJBarbershopMockPorto003",
+                GooglePlaceId = "ChIJBarbershopMockPorto003",
+                Rating        = 4.5,
                 Category      = BarbershopCategory.Unisex,
                 IsActive      = true,
-                CreatedAt     = DateTime.Now.AddMonths(-2)
+                CreatedAt     = DateTime.Now.AddMonths(-2),
+                UpdatedAt     = DateTime.Now
             };
             context.Barbershops.Add(provider3);
             await context.SaveChangesAsync();

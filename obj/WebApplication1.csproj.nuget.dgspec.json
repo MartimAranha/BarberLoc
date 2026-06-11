@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Martim\\Documents\\BarberLoc\\WebApplication1.csproj": {}
+    "C:\\Users\\martim\\Desktop\\BarberLoc\\WebApplication1.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Martim\\Documents\\BarberLoc\\WebApplication1.csproj": {
+    "C:\\Users\\martim\\Desktop\\BarberLoc\\WebApplication1.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Martim\\Documents\\BarberLoc\\WebApplication1.csproj",
+        "projectUniqueName": "C:\\Users\\martim\\Desktop\\BarberLoc\\WebApplication1.csproj",
         "projectName": "WebApplication1",
-        "projectPath": "C:\\Users\\Martim\\Documents\\BarberLoc\\WebApplication1.csproj",
-        "packagesPath": "C:\\Users\\Martim\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Martim\\Documents\\BarberLoc\\obj\\",
+        "projectPath": "C:\\Users\\martim\\Desktop\\BarberLoc\\WebApplication1.csproj",
+        "packagesPath": "C:\\Users\\martim\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\martim\\Desktop\\BarberLoc\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Martim\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\martim\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -99,7 +99,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

@@ -29,15 +29,25 @@ namespace WebApplication1.Models
         public string? OpeningHours { get; set; }
         
         public string? ImageUrl { get; set; }
-
         // Optional Google Place ID when available (for reviews and direct map links)
+        // New canonical GooglePlaceId used as the unique mapping to Google Places.
+        [Required]
+        [StringLength(100)]
+        public string GooglePlaceId { get; set; } = string.Empty;
+
+        // Existing legacy PlaceId property retained for compatibility with older code.
         public string? PlaceId { get; set; }
         
+        // AverageRating kept for historical compatibility. New optional Rating field stores
+        // the latest Google Places rating when available.
         public double AverageRating { get; set; } = 0;
+
+        public double? Rating { get; set; }
         
         public bool IsActive { get; set; } = true;
         
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
         public BarbershopCategory Category { get; set; } = BarbershopCategory.Barbershop;
         

@@ -88,6 +88,29 @@ namespace WebApplication1.Data
             builder.Entity<BarberShopPlace>()
                 .HasIndex(b => new { b.Category, b.Rating })
                 .HasDatabaseName("IX_BarberShopPlaces_Category_Rating");
+
+            // ── Barbershop: explicit column configuration for new Google Places fields ──
+            // GooglePlaceId: required string (nvarchar 100), unique index for O(1) place lookups.
+            builder.Entity<Barbershop>()
+                .Property(b => b.GooglePlaceId)
+                .IsRequired()
+                .HasMaxLength(100)
+                .HasColumnType("nvarchar(100)");
+
+            builder.Entity<Barbershop>()
+                .HasIndex(b => b.GooglePlaceId)
+                .IsUnique()
+                .HasDatabaseName("IX_Barbershops_GooglePlaceId");
+
+            // Rating: nullable double (float) — stores the latest Google Places rating.
+            builder.Entity<Barbershop>()
+                .Property(b => b.Rating)
+                .HasColumnType("float");
+
+            // UpdatedAt: non-nullable datetime2 — tracks last data refresh.
+            builder.Entity<Barbershop>()
+                .Property(b => b.UpdatedAt)
+                .HasColumnType("datetime2");
         }
     }
 }

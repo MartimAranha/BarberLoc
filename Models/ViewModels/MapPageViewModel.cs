@@ -26,6 +26,17 @@ namespace WebApplication1.Models.ViewModels
         public double DefaultLongitude { get; set; } = -9.1399;
 
         /// <summary>
+        /// Initial Leaflet zoom level. 14 = city-district granularity, ideal for Lisbon barbershop density.
+        /// </summary>
+        public int DefaultZoom { get; set; } = 14;
+
+        /// <summary>
+        /// True when a valid <c>Google:PlacesApiKey</c> is configured and live API data is available.
+        /// False in Demo Mode — the UI uses this to show a badge on the sidebar header.
+        /// </summary>
+        public bool HasApiKey { get; set; }
+
+        /// <summary>
         /// True when no valid Google Places API key is configured (or <c>Google:DemoMode = true</c>
         /// is explicitly set in appsettings). Controls the demo-mode banner and mock-data indicators.
         /// </summary>

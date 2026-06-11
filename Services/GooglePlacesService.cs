@@ -531,6 +531,100 @@ namespace WebApplication1.Services
             }
         }
 
+        // ─── FetchLiveBarbershopsAsync ─────────────────────────────────────────────
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel>> FetchLiveBarbershopsAsync(
+            double lat, double lng, int radiusInMeters)
+        {
+            // Clamp radius to the API maximum
+            radiusInMeters = Math.Clamp(radiusInMeters, 100, 50_000);
+
+            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                _logger.LogInformation("[GooglePlacesService] FetchLiveBarbershopsAsync: No API key. Returning empty list.");
+                return Array.Empty<Models.ViewModels.BarberShopPlaceViewModel>();
+            }
+
+            // 10-minute memory cache keyed on rounded coords + radius to avoid hammering the API during panning
+            var cacheKey = $"live_{lat:F3}_{lng:F3}_{radiusInMeters}";
+            if (_memoryCache.TryGetValue(cacheKey, out IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel>? cachedLive) && cachedLive != null)
+                return cachedLive;
+
+            var latStr = lat.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var lngStr = lng.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var locationParam = $"{latStr},{lngStr}";
+
+            // Build the two request URLs: hair_care (salons + barbers combined) and barber (classic barbershops)
+            var hairCareUrl = "https://maps.googleapis.com/maps/api/place/nearbysearch/json" +
+                              $"?location={locationParam}" +
+                              $"&radius={radiusInMeters}" +
+                              "&type=hair_care" +
+                              "&language=pt" +
+                              $"&key={apiKey}";
+
+            var barberUrl  = "https://maps.googleapis.com/maps/api/place/nearbysearch/json" +
+                              $"?location={locationParam}" +
+                              $"&radius={radiusInMeters}" +
+                              "&type=barber" +
+                              "&language=pt" +
+                              $"&key={apiKey}";
+
+            try
+            {
+                // Fire both requests concurrently to halve the latency
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+                var hairCareTask = _httpClient.GetAsync(hairCareUrl, cts.Token);
+                var barberTask   = _httpClient.GetAsync(barberUrl,   cts.Token);
+                await Task.WhenAll(hairCareTask, barberTask);
+
+                // Merge both result sets, deduplicating by PlaceId (a place tagged with both types appears in both responses)
+                var merged = new Dictionary<string, Models.ViewModels.BarberShopPlaceViewModel>(StringComparer.Ordinal);
+
+                if (hairCareTask.Result.IsSuccessStatusCode)
+                {
+                    var json = await hairCareTask.Result.Content.ReadAsStringAsync();
+                    foreach (var vm in ParseNearbySearchResponse(json, apiKey))
+                        merged.TryAdd(vm.PlaceId, vm);
+                }
+                else
+                {
+                    _logger.LogWarning("[GooglePlacesService] hair_care NearbySearch returned {Status}.", hairCareTask.Result.StatusCode);
+                }
+
+                if (barberTask.Result.IsSuccessStatusCode)
+                {
+                    var json = await barberTask.Result.Content.ReadAsStringAsync();
+                    foreach (var vm in ParseNearbySearchResponse(json, apiKey))
+                        merged.TryAdd(vm.PlaceId, vm);
+                }
+                else
+                {
+                    _logger.LogWarning("[GooglePlacesService] barber NearbySearch returned {Status}.", barberTask.Result.StatusCode);
+                }
+
+                IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel> result =
+                    merged.Values.OrderByDescending(p => p.Rating ?? 0).ToList();
+
+                _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(10));
+                _logger.LogInformation("[GooglePlacesService] FetchLiveBarbershops: {Count} unique places at ({Lat},{Lng}) r={Radius}m.",
+                    result.Count, lat, lng, radiusInMeters);
+
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("[GooglePlacesService] FetchLiveBarbershopsAsync timed out for ({Lat},{Lng}).", lat, lng);
+                return Array.Empty<Models.ViewModels.BarberShopPlaceViewModel>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[GooglePlacesService] FetchLiveBarbershopsAsync failed for ({Lat},{Lng}).", lat, lng);
+                return Array.Empty<Models.ViewModels.BarberShopPlaceViewModel>();
+            }
+        }
+
         private static IEnumerable<Models.ViewModels.BarberShopPlaceViewModel> ParseNearbySearchResponse(string json, string apiKey)
         {
             var results = new List<Models.ViewModels.BarberShopPlaceViewModel>();

@@ -10,104 +10,333 @@
 @Html.AntiForgeryToken()
 
 <style>
-    /* ── Map page layout ──────────────────────────────────────────────────── */
-    #map-page-wrapper {
-        position: relative;
-        height: calc(100vh - 60px);
+    /* ── Reset main container so the split-screen fills the viewport ─────────── */
+    .container-fluid > main { padding: 0 !important; overflow: hidden; }
+
+    /* ── Root split-screen layout ────────────────────────────────────────────── */
+    #map-layout {
+        display: flex;
+        height: calc(100vh - 58px);
         min-height: 480px;
         overflow: hidden;
-        background: #0f1117;
+        font-family: 'Outfit', system-ui, sans-serif;
+    }
+
+    /* ══ LEFT SIDEBAR ══════════════════════════════════════════════════════════ */
+    #map-sidebar {
+        width: 340px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        background: #0d1117;
+        border-right: 1px solid rgba(255, 255, 255, 0.07);
+        overflow: hidden;
+        transition: width 0.3s cubic-bezier(.4,0,.2,1);
+        z-index: 10;
+    }
+
+    /* ── Sidebar header (search + title) ────────────────────────────────────── */
+    #sidebar-header {
+        padding: 1.1rem 1rem 0.85rem;
+        background: linear-gradient(160deg, #1a2744 0%, #0d1524 100%);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        flex-shrink: 0;
+    }
+
+    .sidebar-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #e2e8f0;
+        margin: 0 0 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .sidebar-title i { color: #4f7cf0; }
+
+    .demo-mode-pill {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        background: #f59f00;
+        color: #1a0e00;
+        padding: 0.2rem 0.6rem;
+        border-radius: 2rem;
+        text-transform: uppercase;
+    }
+
+    /* ── Search input ────────────────────────────────────────────────────────── */
+    .search-wrapper {
+        position: relative;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 0.9rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: rgba(255, 255, 255, 0.35);
+        font-size: 0.8rem;
+        pointer-events: none;
+    }
+
+    #sidebar-search {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 2rem;
+        padding: 0.55rem 1rem 0.55rem 2.4rem;
+        color: #e2e8f0;
+        font-size: 0.85rem;
+        outline: none;
+        transition: border-color 0.2s, background 0.2s;
+        font-family: inherit;
+    }
+
+    #sidebar-search:focus {
+        border-color: rgba(79, 124, 240, 0.55);
+        background: rgba(255, 255, 255, 0.09);
+    }
+
+    #sidebar-search::placeholder { color: rgba(255, 255, 255, 0.28); }
+
+    /* ── Filters section ─────────────────────────────────────────────────────── */
+    #sidebar-filters {
+        padding: 0.75rem 1rem 0.6rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: #0d1117;
+        flex-shrink: 0;
+    }
+
+    .filter-group { margin-bottom: 0.55rem; }
+    .filter-group:last-child { margin-bottom: 0; }
+
+    .filter-group-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: rgba(255, 255, 255, 0.35);
+        margin-bottom: 0.4rem;
+    }
+
+    .filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0.22rem 0.65rem;
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 0.76rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.17s ease;
+        font-family: inherit;
+    }
+
+    .filter-chip:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.22);
+        color: #fff;
+    }
+
+    .filter-chip.active {
+        background: #3b5bdb;
+        border-color: #3b5bdb;
+        color: #fff;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(59, 91, 219, 0.4);
+    }
+
+    .chip-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    /* ── Results header ──────────────────────────────────────────────────────── */
+    #sidebar-results-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        flex-shrink: 0;
+        background: #0d1117;
+    }
+
+    #results-count {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.4);
+        letter-spacing: 0.03em;
+    }
+
+    .reset-btn {
+        font-size: 0.72rem;
+        color: rgba(255, 255, 255, 0.4);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.4rem;
+        transition: color 0.15s, background 0.15s;
+        font-family: inherit;
+    }
+
+    .reset-btn:hover {
+        color: #e2e8f0;
+        background: rgba(255, 255, 255, 0.07);
+    }
+
+    /* ── Scrollable shop list ────────────────────────────────────────────────── */
+    #sidebar-shop-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.6rem 0.6rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+
+    #sidebar-shop-list::-webkit-scrollbar { width: 4px; }
+    #sidebar-shop-list::-webkit-scrollbar-track { background: transparent; }
+    #sidebar-shop-list::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1);
+        border-radius: 2px;
+    }
+
+    /* ── Shop cards ──────────────────────────────────────────────────────────── */
+    .shop-card {
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 0.8rem;
+        padding: 0.8rem 0.9rem;
+        margin-bottom: 0.45rem;
+        cursor: pointer;
+        transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+        outline: none;
+    }
+
+    .shop-card:hover {
+        background: rgba(255, 255, 255, 0.075);
+        border-color: rgba(255, 255, 255, 0.14);
+        transform: translateX(3px);
+    }
+
+    .shop-card:focus-visible {
+        outline: 2px solid rgba(79, 124, 240, 0.6);
+        outline-offset: 1px;
+    }
+
+    .shop-card--active {
+        background: rgba(59, 91, 219, 0.16) !important;
+        border-color: rgba(59, 91, 219, 0.45) !important;
+        box-shadow: 0 0 0 1px rgba(59, 91, 219, 0.2), 0 4px 12px rgba(59, 91, 219, 0.15) !important;
+        transform: translateX(3px) !important;
+    }
+
+    .shop-card-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .shop-card-name {
+        color: #e2e8f0;
+        font-size: 0.875rem;
+        font-weight: 600;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 175px;
+    }
+
+    .shop-card-cat {
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: 1px;
+    }
+
+    .shop-card-addr {
+        color: #4a5568;
+        font-size: 0.775rem;
+        margin-top: 3px;
+        line-height: 1.3;
+        max-width: 185px;
+    }
+
+    .shop-card-rating { min-width: 38px; }
+    .shop-card-stars { color: #f9c74f; font-size: 9px; line-height: 1; }
+    .shop-card-rating-val { color: #f9c74f; font-size: 0.8rem; font-weight: 700; margin-top: 2px; }
+
+    /* ── Empty state ─────────────────────────────────────────────────────────── */
+    .sidebar-empty {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        color: rgba(255, 255, 255, 0.3);
+    }
+
+    .sidebar-empty i { display: block; margin-bottom: 1rem; }
+
+    /* ══ RIGHT MAP AREA ════════════════════════════════════════════════════════ */
+    #map-area {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+        min-width: 0;
     }
 
     #map {
         height: 100%;
         width: 100%;
         z-index: 1;
+        background: #0f1117;
     }
 
-    /* ── Filter sidebar ───────────────────────────────────────────────────── */
-    #filter-sidebar {
-        position: absolute;
-        top: 14px;
-        left: 14px;
-        z-index: 800;
-        width: 290px;
-        max-height: calc(100% - 28px);
-        overflow-y: auto;
-        border-radius: 1.1rem;
-        box-shadow: 0 8px 32px rgba(0,0,0,.30);
-        background: rgba(255,255,255,.97);
-        backdrop-filter: blur(12px);
-        transition: transform 0.28s cubic-bezier(.4,0,.2,1);
-    }
-
-    #filter-sidebar.collapsed-sidebar {
-        transform: translateX(calc(-100% - 20px));
-    }
-
-    /* Toggle button */
-    #toggle-sidebar-btn {
-        position: absolute;
-        top: 14px;
-        left: 14px;
-        z-index: 801;
-        border-radius: 0.75rem;
-        box-shadow: 0 2px 12px rgba(0,0,0,.25);
-        background: #fff;
-        border: none;
-        padding: 0.45rem 0.85rem;
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: #343a40;
-        transition: left 0.28s cubic-bezier(.4,0,.2,1), box-shadow 0.2s;
-        display: none;
-        align-items: center;
-        gap: 5px;
-        cursor: pointer;
-    }
-
-    #toggle-sidebar-btn.visible {
-        display: flex;
-    }
-
-    /* ── Loading overlay ──────────────────────────────────────────────────── */
+    /* ── Loading overlay ─────────────────────────────────────────────────────── */
     #map-loading {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
         z-index: 900;
-        background: rgba(255,255,255,.94);
+        background: rgba(13, 17, 23, 0.92);
         backdrop-filter: blur(10px);
         border-radius: 1rem;
-        padding: 1.5rem 2rem;
-        box-shadow: 0 4px 24px rgba(0,0,0,.18);
+        padding: 1.4rem 2rem;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+        color: #e2e8f0;
     }
 
-    /* ── API key warning ──────────────────────────────────────────────────── */
+    /* ── Demo Mode banner ────────────────────────────────────────────────────── */
     #api-key-warning {
         position: absolute;
         bottom: 14px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 800;
-        width: min(500px, calc(100vw - 28px));
+        width: min(500px, calc(100vw - 360px - 28px));
     }
 
-    /* ── Category legend dot ──────────────────────────────────────────────── */
-    .legend-dot {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        margin-right: 5px;
-        flex-shrink: 0;
-    }
-
-    /* ── Leaflet custom DivIcon marker ───────────────────────────────────── */
+    /* ── Leaflet custom DivIcon marker ───────────────────────────────────────── */
     .bl-marker {
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -116,190 +345,214 @@
         font-weight: 700;
         font-family: 'Outfit', system-ui, sans-serif;
         color: #fff;
-        border: 2.5px solid rgba(255,255,255,.85);
-        box-shadow: 0 3px 10px rgba(0,0,0,.35);
+        border: 2.5px solid rgba(255, 255, 255, 0.88);
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
         cursor: pointer;
-        transition: transform .15s ease, box-shadow .15s ease;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
         user-select: none;
     }
 
     .bl-marker:hover {
         transform: scale(1.18);
-        box-shadow: 0 5px 18px rgba(0,0,0,.45);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.55);
     }
 
-    .bl-marker.active-marker {
-        transform: scale(1.28);
-        border-color: #fff;
-        box-shadow: 0 0 0 3px rgba(255,255,255,.55), 0 6px 20px rgba(0,0,0,.5);
+    .bl-marker--active {
+        transform: scale(1.3) !important;
+        border-color: #fff !important;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 6px 22px rgba(0, 0, 0, 0.6) !important;
     }
 
-    /* ── Responsive ───────────────────────────────────────────────────────── */
+    /* ── Mobile sidebar toggle button ────────────────────────────────────────── */
+    #sidebar-toggle-btn {
+        display: none; /* hidden on desktop */
+        position: absolute;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 801;
+        background: #1e2d52;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 2rem;
+        color: #e2e8f0;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.65rem 1.4rem;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+        transition: background 0.18s, box-shadow 0.18s;
+        align-items: center;
+        gap: 0.4rem;
+        white-space: nowrap;
+    }
+
+    #sidebar-toggle-btn:hover, #sidebar-toggle-btn.active {
+        background: #2a3f73;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+    }
+
+    /* ══ RESPONSIVE — Mobile ════════════════════════════════════════════════════ */
     @@media (max-width: 767.98px) {
-        #map-page-wrapper { height: calc(100svh - 56px); }
-
-        #filter-sidebar {
-            width: calc(100vw - 24px);
-            max-height: 44vh;
-            top: auto;
-            bottom: 12px;
-            left: 12px;
-            right: 12px;
+        #map-layout {
+            flex-direction: column;
+            height: calc(100svh - 56px);
         }
 
-        #filter-sidebar.collapsed-sidebar {
-            transform: translateY(calc(100% + 20px));
+        #map-area {
+            flex: 1;
         }
 
-        #toggle-sidebar-btn {
-            top: auto;
-            bottom: 12px;
-            left: auto;
-            right: 12px;
+        #map-sidebar {
+            width: 100%;
+            height: 0;
+            min-height: 0;
+            overflow: hidden;
+            transition: height 0.32s cubic-bezier(.4, 0, .2, 1);
+            border-right: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
         }
+
+        #map-sidebar.sidebar--mobile-open {
+            height: 62svh;
+        }
+
+        #sidebar-toggle-btn {
+            display: flex;
+        }
+
+        #api-key-warning {
+            width: calc(100vw - 28px);
+            bottom: 80px;
+        }
+    }
+
+    @@media (min-width: 768px) and (max-width: 1023.98px) {
+        #map-sidebar { width: 290px; }
     }
 </style>
 
-@* ── Leaflet CSS (loaded before the map container renders) ── *@
+@* Leaflet CSS — loaded before the map container renders *@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-<div id="map-page-wrapper">
+<div id="map-layout">
 
-    @* Leaflet map canvas *@
-    <div id="map" role="application" aria-label="Mapa interativo de barbearias"></div>
+    @* ══ LEFT SIDEBAR ═══════════════════════════════════════════════════════════ *@
+    <aside id="map-sidebar" aria-label="Lista de barbearias">
 
-    @* Loading spinner (auto-hidden after tiles load) *@
-    <div id="map-loading" class="text-center">
-        <div class="spinner-border text-primary mb-2" role="status" style="width:2.5rem;height:2.5rem;">
-            <span class="visually-hidden">A carregar mapa...</span>
-        </div>
-        <p class="mb-0 small text-muted fw-medium">A carregar barbearias...</p>
-    </div>
-
-    @* Demo Mode banner (shown when no valid API key or Google:DemoMode = true) *@
-    @if (isDemoMode)
-    {
-        <div id="api-key-warning">
-            <div class="alert alert-warning alert-dismissible fade show shadow mb-0" role="alert"
-                 style="border-left: 4px solid #f59f00; border-radius: 0.85rem;">
-                <div class="d-flex align-items-start gap-2">
-                    <i class="fas fa-flask mt-1 flex-shrink-0" style="color: #e67700;"></i>
-                    <div>
-                        <span class="badge rounded-pill me-1"
-                              style="background:#f59f00; color:#1a1a1a; font-size:.7rem; letter-spacing:.03em;">MODO DEMO</span>
-                        <strong class="text-dark">A usar dados locais de seed.</strong>
-                        <span class="text-dark small d-block mt-1">
-                            Configure <code>Google:PlacesApiKey</code> em <code>appsettings.json</code>
-                            para activar avaliações e fotos ao vivo do Google Places.
-                        </span>
-                    </div>
-                </div>
-                <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
-            </div>
-        </div>
-    }
-
-    @* Toggle button — shown when the sidebar is collapsed *@
-    <button id="toggle-sidebar-btn" title="Mostrar Filtros" aria-label="Mostrar filtros">
-        <i class="fas fa-sliders-h"></i>&nbsp;Filtros
-    </button>
-
-    @* ── Filter sidebar ────────────────────────────────────────────────────── *@
-    <div id="filter-sidebar" class="p-3">
-
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="fw-bold mb-0 d-flex align-items-center gap-2">
-                <i class="fas fa-sliders-h text-primary"></i>Filtrar
+        @* Sidebar header: title, demo badge, search input *@
+        <div id="sidebar-header">
+            <h1 class="sidebar-title">
+                <i class="fas fa-cut" aria-hidden="true"></i>
+                Barbearias
                 @if (isDemoMode)
                 {
-                    <span class="badge rounded-pill small"
-                          style="background:#fff3bf; color:#7d5900; font-size:.65rem;
-                                 border: 1px solid #ffe066; letter-spacing:.03em;"
-                          title="Dados de seed locais — sem API key configurada">
-                        <i class="fas fa-flask me-1"></i>Demo
-                    </span>
+                    <span class="demo-mode-pill ms-1">Demo</span>
                 }
-            </h6>
-            <button class="btn btn-sm btn-light p-1 px-2" id="btn-collapse-sidebar" aria-label="Fechar painel">
-                <i class="fas fa-times small"></i>
+            </h1>
+            <div class="search-wrapper">
+                <i class="fas fa-search search-icon" aria-hidden="true"></i>
+                <input type="search" id="sidebar-search" class="search-input"
+                       placeholder="Pesquisar por nome ou endereço..."
+                       aria-label="Pesquisar barbearias" autocomplete="off" />
+            </div>
+        </div>
+
+        @* Filters: category + rating chips *@
+        <div id="sidebar-filters" role="group" aria-label="Filtros">
+            <div class="filter-group">
+                <div class="filter-group-label">Categoria</div>
+                <div class="filter-chips">
+                    <button class="filter-chip active" data-filter="category" data-value=""
+                            id="filter-cat-all" aria-pressed="true">Todas</button>
+                    <button class="filter-chip" data-filter="category" data-value="Barbershop"
+                            id="filter-cat-barber" aria-pressed="false">
+                        <span class="chip-dot" style="background:#3b5bdb;" aria-hidden="true"></span>Barbearia
+                    </button>
+                    <button class="filter-chip" data-filter="category" data-value="HairSalon"
+                            id="filter-cat-salon" aria-pressed="false">
+                        <span class="chip-dot" style="background:#d6336c;" aria-hidden="true"></span>Cabeleireiro
+                    </button>
+                    <button class="filter-chip" data-filter="category" data-value="Unisex"
+                            id="filter-cat-unisex" aria-pressed="false">
+                        <span class="chip-dot" style="background:#0ca678;" aria-hidden="true"></span>Unisexo
+                    </button>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <div class="filter-group-label">Avaliação Mínima</div>
+                <div class="filter-chips">
+                    <button class="filter-chip active" data-filter="minRating" data-value=""
+                            id="filter-rating-any" aria-pressed="true">Qualquer</button>
+                    <button class="filter-chip" data-filter="minRating" data-value="4"
+                            id="filter-rating-4" aria-pressed="false">4+ ★</button>
+                    <button class="filter-chip" data-filter="minRating" data-value="4.5"
+                            id="filter-rating-45" aria-pressed="false">4.5+ ★</button>
+                </div>
+            </div>
+        </div>
+
+        @* Results count + reset *@
+        <div id="sidebar-results-header" aria-live="polite">
+            <span id="results-count" class="results-count">— resultados</span>
+            <button id="btn-reset-filters" class="reset-btn" aria-label="Limpar filtros">
+                <i class="fas fa-undo me-1" aria-hidden="true"></i>Limpar
             </button>
         </div>
 
-        @* Rating filter *@
-        <div class="mb-3">
-            <label class="form-label small fw-semibold text-muted text-uppercase" style="letter-spacing:.04em;">
-                Avaliação Mínima
-            </label>
-            <div class="d-flex flex-wrap gap-1">
-                <button class="btn btn-sm btn-outline-warning filter-btn active"
-                        data-filter="minRating" data-value="" id="filter-rating-any">Qualquer</button>
-                <button class="btn btn-sm btn-outline-warning filter-btn"
-                        data-filter="minRating" data-value="4" id="filter-rating-4">
-                    4+ <i class="fas fa-star fa-xs"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-warning filter-btn"
-                        data-filter="minRating" data-value="4.5" id="filter-rating-45">
-                    4.5+ <i class="fas fa-star fa-xs"></i>
-                </button>
-            </div>
+        @* Scrollable shop list — populated by JS *@
+        <div id="sidebar-shop-list" role="list" aria-label="Lista de barbearias">
+            @* JS renders cards here from mapShops *@
         </div>
 
-        @* Category filter *@
-        <div class="mb-3">
-            <label class="form-label small fw-semibold text-muted text-uppercase" style="letter-spacing:.04em;">
-                Categoria
-            </label>
-            <div class="d-flex flex-wrap gap-1">
-                <button class="btn btn-sm btn-outline-secondary filter-btn active"
-                        data-filter="category" data-value="" id="filter-cat-all">Todas</button>
-                <button class="btn btn-sm filter-btn" data-filter="category" data-value="Barbershop"
-                        id="filter-cat-barber"
-                        style="background:rgba(59,91,219,.1);border-color:#3b5bdb;color:#3b5bdb;">
-                    <span class="legend-dot" style="background:#3b5bdb;"></span>Barbearia
-                </button>
-                <button class="btn btn-sm filter-btn" data-filter="category" data-value="HairSalon"
-                        id="filter-cat-salon"
-                        style="background:rgba(214,51,108,.1);border-color:#d6336c;color:#d6336c;">
-                    <span class="legend-dot" style="background:#d6336c;"></span>Cabeleireiro
-                </button>
-                <button class="btn btn-sm filter-btn" data-filter="category" data-value="Unisex"
-                        id="filter-cat-unisex"
-                        style="background:rgba(12,166,120,.1);border-color:#0ca678;color:#0ca678;">
-                    <span class="legend-dot" style="background:#0ca678;"></span>Unisexo
-                </button>
+    </aside>
+
+    @* ══ RIGHT MAP AREA ══════════════════════════════════════════════════════════ *@
+    <div id="map-area">
+
+        @* Leaflet map canvas *@
+        <div id="map" role="application" aria-label="Mapa interativo de barbearias"></div>
+
+        @* Loading spinner *@
+        <div id="map-loading" class="text-center">
+            <div class="spinner-border text-primary mb-2" role="status" style="width:2.4rem;height:2.4rem;">
+                <span class="visually-hidden">A carregar mapa...</span>
             </div>
+            <p class="mb-0 small fw-medium" style="color:#94a3b8;">A carregar barbearias...</p>
         </div>
 
-        <hr class="my-2">
-
-        @* Colour legend *@
-        <div class="mb-3">
-            <p class="small text-muted fw-semibold mb-2 text-uppercase" style="letter-spacing:.04em;">Legenda</p>
-            <div class="d-flex flex-column gap-1 small">
-                <div class="d-flex align-items-center">
-                    <span class="legend-dot" style="background:#3b5bdb;"></span>Barbearia
-                </div>
-                <div class="d-flex align-items-center">
-                    <span class="legend-dot" style="background:#d6336c;"></span>Cabeleireiro
-                </div>
-                <div class="d-flex align-items-center">
-                    <span class="legend-dot" style="background:#0ca678;"></span>Unisexo
-                </div>
-                <div class="d-flex align-items-center">
-                    <span class="legend-dot" style="background:#495057;"></span>Outro
+        @* Demo Mode banner — shown when API key is absent *@
+        @if (isDemoMode)
+        {
+            <div id="api-key-warning">
+                <div class="alert alert-warning alert-dismissible fade show shadow mb-0" role="alert"
+                     style="border-left:4px solid #f59f00; border-radius:.85rem; font-size:.85rem;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="fas fa-flask mt-1 flex-shrink-0" style="color:#e67700;" aria-hidden="true"></i>
+                        <div>
+                            <span class="badge rounded-pill me-1"
+                                  style="background:#f59f00;color:#1a1a1a;font-size:.68rem;letter-spacing:.04em;">MODO DEMO</span>
+                            <strong class="text-dark">A usar dados locais de seed.</strong>
+                            <span class="text-dark small d-block mt-1">
+                                Configure <code>Google:PlacesApiKey</code> em <code>appsettings.json</code>
+                                para activar avaliações e fotos ao vivo.
+                            </span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
                 </div>
             </div>
-        </div>
+        }
 
-        <hr class="my-2">
-
-        <div class="d-flex justify-content-between align-items-center">
-            <small class="text-muted fw-medium" id="results-count">— resultados</small>
-            <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">
-                <i class="fas fa-undo me-1"></i>Limpar
-            </button>
-        </div>
+        @* Mobile: floating toggle button *@
+        <button id="sidebar-toggle-btn" aria-expanded="false" aria-controls="map-sidebar">
+            <i class="fas fa-list" aria-hidden="true"></i>
+            Barbearias
+            <span id="toggle-count-badge" class="badge bg-primary ms-1" aria-hidden="true"></span>
+        </button>
 
     </div>
 </div>
@@ -309,21 +562,27 @@
 
 @section Scripts {
 
-    @* Leaflet JS — must load before the inline init script below *@
+    @* Leaflet JS — must load before the inline init script *@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     @*
-        barbershops-map.js must load BEFORE the inline script so its exported globals
-        (populatePanel, setPanelState, setTextField, renderStars, setupFavouriteButton)
-        are available when marker-click handlers call them.
+        barbershops-map.js is loaded for its panel utility functions:
+        populatePanel(), setPanelState(), setTextField(), renderStars(), setupFavouriteButton().
+        The Google Maps initMap() function it defines is intentionally unused on this Leaflet page.
     *@
     <script src="~/js/barbershops-map.js" asp-append-version="true"></script>
 
     <script>
-    // ── Server-serialised BarberShopPlace seed data ──────────────────────────
-    // Provides marker positions without an extra round-trip on initial load.
-    // Full details are fetched lazily via /Map/Details on marker click.
+    /* =====================================================================
+       Map/Index.cshtml — Split-screen Leaflet Map
+       Engine: Leaflet 1.9.4 + OpenStreetMap (no Google API key required)
+       Panel utilities: barbershops-map.js (populatePanel, setPanelState…)
+       ===================================================================== */
+
+    // ── Server-serialised seed data ─────────────────────────────────────────────
+    // Provides marker positions and sidebar data without an initial AJAX round-trip.
+    // Full place details are fetched lazily on marker / card click via /Map/Details.
     const mapShops = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
         Model.NearbyShops,
         new System.Text.Json.JsonSerializerOptions {
@@ -331,69 +590,75 @@
         }
     ));
 
-    // ── Global config (read by barbershops-map.js utility functions) ─────────
+    // ── Global config (also read by barbershops-map.js utilities) ───────────────
     window.BarberLocConfig = {
-        isAuthenticated: @(User.Identity?.IsAuthenticated == true ? "true" : "false"),
-        antiForgeryToken: document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '',
-        defaultLat: @Model.DefaultLatitude.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        defaultLng: @Model.DefaultLongitude.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        isAuthenticated  : @(User.Identity?.IsAuthenticated == true ? "true" : "false"),
+        antiForgeryToken : document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '',
+        defaultLat       : @Model.DefaultLatitude.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        defaultLng       : @Model.DefaultLongitude.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        defaultZoom      : @Model.DefaultZoom
     };
 
-    // ── Module-scope map state ────────────────────────────────────────────────
-    let leafletMap         = null;
-    let leafletMarkers     = [];
-    let allMapShops        = [...mapShops];
-    let activeMapFilters   = { category: '', minRating: '' };
-    let mapOffcanvasInst   = null;
+    // ── Module-scope state ──────────────────────────────────────────────────────
+    let leafletMap          = null;
+    let leafletMarkers      = [];
+    let allMapShops         = [...mapShops];
+    let activeMapFilters    = { category: '', minRating: '', search: '' };
+    let mapOffcanvasInst    = null;
     let activeLeafletMarker = null;
-    let currentMapPlaceId  = null;  // kept in sync for the favourite-button handler
+    let currentMapPlaceId   = null;
 
-    // ── Category → marker colour map ─────────────────────────────────────────
     const markerColours = {
-        Barbershop: '#3b5bdb',
-        HairSalon:  '#d6336c',
-        Unisex:     '#0ca678',
-        default:    '#495057'
+        Barbershop : '#3b5bdb',
+        HairSalon  : '#d6336c',
+        Unisex     : '#0ca678',
+        default    : '#495057'
     };
 
-    // ────────────────────────────────────────────────────────────────────────
-    // DOMContentLoaded: bootstrap offcanvas + map init
-    // ────────────────────────────────────────────────────────────────────────
+    const categoryLabels = {
+        Barbershop : 'Barbearia',
+        HairSalon  : 'Cabeleireiro',
+        Unisex     : 'Unisexo'
+    };
+
+    // ── Initialise on DOM ready ─────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', function () {
-        // Init Bootstrap Offcanvas panel
-        const panelEl = document.getElementById('placeDetailPanel');
+        // Bootstrap Offcanvas: prefer the existing instance from barbershops-map.js
+        var panelEl = document.getElementById('placeDetailPanel');
         if (panelEl && typeof bootstrap !== 'undefined') {
-            mapOffcanvasInst = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+            mapOffcanvasInst = bootstrap.Offcanvas.getOrCreateInstance(panelEl);
         }
 
         initLeafletMap();
-        wireFilterPanel();
+        renderSidebarList(allMapShops);
+        wireControls();
     });
 
-    // ── Leaflet map setup ────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  LEAFLET MAP
+    // ═══════════════════════════════════════════════════════════════════════════
+
     function initLeafletMap() {
-        const lat = window.BarberLocConfig.defaultLat;
-        const lng = window.BarberLocConfig.defaultLng;
+        var cfg = window.BarberLocConfig;
 
         leafletMap = L.map('map', {
-            center: [lat, lng],
-            zoom: 12,
-            zoomControl: false   // we add it at bottom-right
+            center      : [cfg.defaultLat, cfg.defaultLng],
+            zoom        : cfg.defaultZoom,   // 14 — city-district granularity
+            zoomControl : false
         });
 
         L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
 
-        // OpenStreetMap tiles (free, no API key required)
+        // OpenStreetMap tiles — free, no API key, production-ready
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            maxZoom     : 19,
+            attribution : '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
         }).addTo(leafletMap);
 
-        // Hide loader once the map fires its first 'load' event
+        // Hide loading overlay once tiles load
         leafletMap.once('load', function () {
             document.getElementById('map-loading')?.classList.add('d-none');
         });
-        // Belt-and-suspenders: hide loader after 3 s regardless
         setTimeout(function () {
             document.getElementById('map-loading')?.classList.add('d-none');
         }, 3000);
@@ -401,70 +666,66 @@
         renderLeafletMarkers(allMapShops);
     }
 
-    // ── Build a Leaflet DivIcon for a shop ───────────────────────────────────
+    // ── Build a Leaflet DivIcon for a shop ─────────────────────────────────────
     function buildLeafletIcon(shop) {
-        const colour = markerColours[shop.category] || markerColours.default;
-        // Rating label on marker (e.g. "4.8") or fallback star
-        const label  = shop.rating ? Number(shop.rating).toFixed(1) : '★';
-
+        var colour = markerColours[shop.category] || markerColours.default;
+        var label  = shop.rating ? Number(shop.rating).toFixed(1) : '★';
         return L.divIcon({
-            className: '',          // suppress default leaflet-div-icon styling
-            iconSize:  [36, 36],
-            iconAnchor:[18, 18],
-            popupAnchor: [0, -20],
-            html: `<div class="bl-marker" style="background:${colour};" aria-label="${escHtml(shop.name)}">${escHtml(label)}</div>`
+            className  : '',
+            iconSize   : [40, 40],
+            iconAnchor : [20, 20],
+            html       : '<div class="bl-marker" style="background:' + colour + ';" aria-label="' + escHtml(shop.name) + '">' + escHtml(label) + '</div>'
         });
     }
 
-    // ── Render / re-render all markers ───────────────────────────────────────
+    // ── Render / re-render all markers from a shop list ────────────────────────
     function renderLeafletMarkers(shops) {
         leafletMarkers.forEach(function (m) { m.remove(); });
-        leafletMarkers  = [];
+        leafletMarkers      = [];
         activeLeafletMarker = null;
 
         shops.forEach(function (shop) {
             if (!shop.lat || !shop.lng) return;
 
-            const marker = L.marker([shop.lat, shop.lng], {
-                icon: buildLeafletIcon(shop),
-                title: shop.name,
-                riseOnHover: true
+            var marker = L.marker([shop.lat, shop.lng], {
+                icon        : buildLeafletIcon(shop),
+                title       : shop.name,
+                riseOnHover : true
             }).addTo(leafletMap);
 
             marker._shopData = shop;
             marker.on('click', function () { handleLeafletMarkerClick(this); });
             leafletMarkers.push(marker);
         });
-
-        updateResultsCount(shops.length);
     }
 
-    // ── Marker click handler ─────────────────────────────────────────────────
+    // ── Marker click: highlight, open panel, fetch full details ───────────────
     async function handleLeafletMarkerClick(marker) {
-        // Highlight clicked marker; de-highlight previous
+        // De-activate previous active marker's DOM element
         if (activeLeafletMarker && activeLeafletMarker !== marker) {
-            const prevDiv = activeLeafletMarker.getElement()?.querySelector('.bl-marker');
-            if (prevDiv) prevDiv.classList.remove('active-marker');
+            var prevDiv = activeLeafletMarker.getElement()?.querySelector('.bl-marker');
+            if (prevDiv) prevDiv.classList.remove('bl-marker--active');
         }
-        const markerDiv = marker.getElement()?.querySelector('.bl-marker');
-        if (markerDiv) markerDiv.classList.add('active-marker');
+        var markerDiv = marker.getElement()?.querySelector('.bl-marker');
+        if (markerDiv) markerDiv.classList.add('bl-marker--active');
         activeLeafletMarker = marker;
 
-        // Lazy-init offcanvas (handles the rare case DOMContentLoaded already fired)
+        var shop = marker._shopData;
+        currentMapPlaceId = shop.placeId || null;
+
+        // Highlight the matching sidebar card
+        highlightSidebarCard(shop.placeId);
+
+        // Lazy-init the offcanvas (safety net)
         if (!mapOffcanvasInst) {
-            const panelEl = document.getElementById('placeDetailPanel');
+            var panelEl = document.getElementById('placeDetailPanel');
             if (panelEl && typeof bootstrap !== 'undefined') {
-                mapOffcanvasInst = new bootstrap.Offcanvas(panelEl, { backdrop: true, scroll: false });
+                mapOffcanvasInst = bootstrap.Offcanvas.getOrCreateInstance(panelEl);
             }
             if (!mapOffcanvasInst) return;
         }
 
-        const shop = marker._shopData;
-
-        // Sync currentMapPlaceId for the favourite button handler in barbershops-map.js
-        currentMapPlaceId = shop.placeId || null;
-
-        // Show panel immediately (loading state) for perceived performance
+        // Show panel immediately in loading state for perceived performance
         setPanelState('loading');
         mapOffcanvasInst.show();
         setTextField('name', shop.name || 'Barbearia');
@@ -477,14 +738,15 @@
         }
 
         try {
-            // /Map/Details is the MapController AJAX endpoint for placeId-based lookups
-            const resp = await fetch(`/Map/Details?placeId=${encodeURIComponent(shop.placeId)}`);
+            // /Map/Details is the MapController AJAX endpoint for placeId-based lookups.
+            // It calls IGooglePlacesService (live API or rich mock fallback).
+            var resp = await fetch('/Map/Details?placeId=' + encodeURIComponent(shop.placeId));
             if (!resp.ok) { setPanelState('error'); return; }
 
-            const data = await resp.json();
+            var data = await resp.json();
             if (!data.success) { setPanelState('error'); return; }
 
-            // populatePanel is defined in barbershops-map.js (loaded above this script)
+            // populatePanel is defined in barbershops-map.js
             populatePanel(data);
             setPanelState('content');
         } catch (err) {
@@ -493,85 +755,237 @@
         }
     }
 
-    // ── Fill panel from local shop data (no API call) ────────────────────────
+    // ── Fill panel from local shop data (no API call) ──────────────────────────
     function fillBasicFromMapShop(shop) {
-        setTextField('name', shop.name || '—');
+        setTextField('name',    shop.name    || '—');
         setTextField('address', shop.address || '—');
-        setTextField('rating', shop.rating ? Number(shop.rating).toFixed(1) : '—');
+        setTextField('rating',  shop.rating  ? Number(shop.rating).toFixed(1) : '—');
         renderStars('panel-stars', shop.rating);
-        setTextField('ratings-total', shop.userRatingsTotal
-            ? `(${Number(shop.userRatingsTotal).toLocaleString('pt-PT')} avaliações)` : '');
+        setTextField('ratings-total',
+            shop.userRatingsTotal
+                ? '(' + Number(shop.userRatingsTotal).toLocaleString('pt-PT') + ' avaliações)'
+                : '');
 
-        ['open-badge','phone-row','website-row','hours-section','reviews-section',
-         'photo-carousel-wrapper','mock-badge','btn-favourite'].forEach(function (id) {
-            document.getElementById(id)?.classList.add('d-none');
-        });
+        ['open-badge', 'phone-row', 'website-row', 'hours-section',
+         'reviews-section', 'photo-carousel-wrapper', 'mock-badge', 'btn-favourite']
+            .forEach(function (id) { document.getElementById(id)?.classList.add('d-none'); });
         document.getElementById('photo-placeholder')?.classList.remove('d-none');
 
-        const mapsBtn = document.getElementById('btn-google-maps');
+        var mapsBtn = document.getElementById('btn-google-maps');
         if (mapsBtn) {
-            mapsBtn.href = `https://maps.google.com/?q=${encodeURIComponent(shop.address || shop.name || '')}`;
+            mapsBtn.href = 'https://maps.google.com/?q=' + encodeURIComponent(shop.address || shop.name || '');
         }
     }
 
-    // ── Filter panel wiring ──────────────────────────────────────────────────
-    function wireFilterPanel() {
-        document.querySelectorAll('.filter-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                const filter = btn.dataset.filter;
-                document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`)
-                    .forEach(function (b) { b.classList.remove('active'); });
-                btn.classList.add('active');
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  SIDEBAR
+    // ═══════════════════════════════════════════════════════════════════════════
 
-                if (filter === 'minRating') activeMapFilters.minRating = btn.dataset.value;
-                else                        activeMapFilters.category  = btn.dataset.value;
+    function renderSidebarList(shops) {
+        var list = document.getElementById('sidebar-shop-list');
+        if (!list) return;
+
+        if (!shops || shops.length === 0) {
+            list.innerHTML = '<div class="sidebar-empty" role="status">' +
+                '<i class="fas fa-search fa-2x opacity-50" aria-hidden="true"></i>' +
+                '<p class="mb-0 small">Nenhuma barbearia encontrada<br>com os filtros actuais.</p>' +
+                '</div>';
+            updateResultsCount(0);
+            return;
+        }
+
+        list.innerHTML = shops.map(function (shop, idx) {
+            var colour   = markerColours[shop.category] || markerColours.default;
+            var catLabel = categoryLabels[shop.category] || shop.category;
+            var ratingLabel = shop.rating ? Number(shop.rating).toFixed(1) : '—';
+            var starsHtml   = buildSidebarStars(shop.rating);
+
+            return '<div class="shop-card" ' +
+                   'data-placeid="' + escHtml(shop.placeId || '') + '" ' +
+                   'data-lat="' + shop.lat + '" ' +
+                   'data-lng="' + shop.lng + '" ' +
+                   'data-idx="' + idx + '" ' +
+                   'tabindex="0" role="listitem button" ' +
+                   'aria-label="' + escHtml(shop.name) + '">' +
+                       '<div class="d-flex align-items-start gap-2">' +
+                           '<div class="shop-card-dot flex-shrink-0" style="background:' + colour + '; margin-top: 5px;" aria-hidden="true"></div>' +
+                           '<div class="flex-grow-1" style="min-width:0;">' +
+                               '<div class="shop-card-name">' + escHtml(shop.name) + '</div>' +
+                               '<div class="shop-card-cat" style="color:' + colour + ';">' + escHtml(catLabel) + '</div>' +
+                               '<div class="shop-card-addr text-truncate">' + escHtml(shop.address || '—') + '</div>' +
+                           '</div>' +
+                           '<div class="shop-card-rating text-center flex-shrink-0">' +
+                               '<div class="shop-card-stars" aria-hidden="true">' + starsHtml + '</div>' +
+                               '<div class="shop-card-rating-val">' + ratingLabel + '</div>' +
+                           '</div>' +
+                       '</div>' +
+                   '</div>';
+        }).join('');
+
+        // Wire click + keyboard handlers
+        list.querySelectorAll('.shop-card').forEach(function (card) {
+            card.addEventListener('click', function () { handleSidebarCardClick(this); });
+            card.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSidebarCardClick(this);
+                }
+            });
+        });
+    }
+
+    // ── Sidebar card click: fly map to location + trigger marker click ─────────
+    function handleSidebarCardClick(card) {
+        var placeId = card.dataset.placeid;
+        var lat     = parseFloat(card.dataset.lat);
+        var lng     = parseFloat(card.dataset.lng);
+
+        // Fly the map view to this barbershop at a tighter zoom
+        if (leafletMap && !isNaN(lat) && !isNaN(lng)) {
+            leafletMap.flyTo([lat, lng], 16, { animate: true, duration: 0.75 });
+        }
+
+        // Find the matching Leaflet marker and trigger its click after the fly animation
+        var targetMarker = leafletMarkers.find(function (m) {
+            return m._shopData?.placeId === placeId ||
+                   (Math.abs((m._shopData?.lat ?? 999) - lat) < 0.0002 &&
+                    Math.abs((m._shopData?.lng ?? 999) - lng) < 0.0002);
+        });
+
+        if (targetMarker) {
+            setTimeout(function () { handleLeafletMarkerClick(targetMarker); }, 450);
+        }
+
+        // On mobile: collapse sidebar after card selection
+        if (window.innerWidth < 768) {
+            var sidebar   = document.getElementById('map-sidebar');
+            var toggleBtn = document.getElementById('sidebar-toggle-btn');
+            sidebar?.classList.remove('sidebar--mobile-open');
+            toggleBtn?.classList.remove('active');
+            toggleBtn?.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    // ── Highlight active sidebar card + scroll into view ──────────────────────
+    function highlightSidebarCard(placeId) {
+        document.querySelectorAll('.shop-card').forEach(function (c) {
+            c.classList.remove('shop-card--active');
+        });
+        if (!placeId) return;
+
+        // CSS.escape ensures placeId strings with special characters are valid selectors
+        var activeCard = document.querySelector('.shop-card[data-placeid="' + CSS.escape(placeId) + '"]');
+        if (activeCard) {
+            activeCard.classList.add('shop-card--active');
+            activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    // ── Build star HTML for the sidebar rating display ─────────────────────────
+    function buildSidebarStars(rating) {
+        if (!rating) return '<i class="far fa-star"></i>'.repeat(5);
+        var html = '';
+        for (var i = 1; i <= 5; i++) {
+            if (i <= Math.floor(rating)) {
+                html += '<i class="fas fa-star"></i>';
+            } else if (i === Math.ceil(rating) && rating % 1 >= 0.5) {
+                html += '<i class="fas fa-star-half-alt"></i>';
+            } else {
+                html += '<i class="far fa-star"></i>';
+            }
+        }
+        return html;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  FILTERS + SEARCH
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function wireControls() {
+        // Filter chip buttons
+        document.querySelectorAll('.filter-chip').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var filter = this.dataset.filter;
+                document.querySelectorAll('.filter-chip[data-filter="' + filter + '"]')
+                    .forEach(function (b) {
+                        b.classList.remove('active');
+                        b.setAttribute('aria-pressed', 'false');
+                    });
+                this.classList.add('active');
+                this.setAttribute('aria-pressed', 'true');
+
+                if (filter === 'minRating') activeMapFilters.minRating = this.dataset.value;
+                else                        activeMapFilters.category  = this.dataset.value;
 
                 applyMapFilters();
             });
         });
 
-        document.getElementById('btn-reset-filters')?.addEventListener('click', function () {
-            activeMapFilters = { category: '', minRating: '' };
-            document.querySelectorAll('.filter-btn').forEach(function (b) {
-                b.classList.toggle('active', b.dataset.value === '');
+        // Search input — real-time client-side search
+        var searchInput = document.getElementById('sidebar-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                activeMapFilters.search = this.value.trim().toLowerCase();
+                applyMapFilters();
             });
+        }
+
+        // Reset all filters button
+        document.getElementById('btn-reset-filters')?.addEventListener('click', function () {
+            activeMapFilters = { category: '', minRating: '', search: '' };
+            document.querySelectorAll('.filter-chip').forEach(function (b) {
+                var isAll = b.dataset.value === '';
+                b.classList.toggle('active', isAll);
+                b.setAttribute('aria-pressed', isAll ? 'true' : 'false');
+            });
+            var si = document.getElementById('sidebar-search');
+            if (si) si.value = '';
             applyMapFilters();
         });
 
-        // Collapse / show sidebar
-        const sidebar     = document.getElementById('filter-sidebar');
-        const toggleBtn   = document.getElementById('toggle-sidebar-btn');
-        const collapseBtn = document.getElementById('btn-collapse-sidebar');
+        // Mobile sidebar toggle
+        var toggleBtn = document.getElementById('sidebar-toggle-btn');
+        var sidebar   = document.getElementById('map-sidebar');
+        if (toggleBtn && sidebar) {
+            toggleBtn.addEventListener('click', function () {
+                var isOpen = sidebar.classList.toggle('sidebar--mobile-open');
+                this.classList.toggle('active', isOpen);
+                this.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        }
 
-        collapseBtn?.addEventListener('click', function () {
-            sidebar.classList.add('collapsed-sidebar');
-            toggleBtn.classList.add('visible');
-        });
-
-        toggleBtn?.addEventListener('click', function () {
-            sidebar.classList.remove('collapsed-sidebar');
-            toggleBtn.classList.remove('visible');
-        });
+        // Update mobile badge count on initial load
+        updateResultsCount(allMapShops.length);
     }
 
-    // ── Client-side filter application ───────────────────────────────────────
+    // ── Client-side filter + search application ────────────────────────────────
     function applyMapFilters() {
-        const filtered = allMapShops.filter(function (s) {
-            if (activeMapFilters.category  && s.category  !== activeMapFilters.category)               return false;
+        var filtered = allMapShops.filter(function (s) {
+            if (activeMapFilters.category  && s.category !== activeMapFilters.category)               return false;
             if (activeMapFilters.minRating && (s.rating ?? 0) < parseFloat(activeMapFilters.minRating)) return false;
+            if (activeMapFilters.search) {
+                var term    = activeMapFilters.search;
+                var inName  = (s.name    || '').toLowerCase().includes(term);
+                var inAddr  = (s.address || '').toLowerCase().includes(term);
+                if (!inName && !inAddr) return false;
+            }
             return true;
         });
+
         renderLeafletMarkers(filtered);
+        renderSidebarList(filtered);
     }
 
-    // ── Local utilities ───────────────────────────────────────────────────────
+    // ── Utilities ──────────────────────────────────────────────────────────────
     function updateResultsCount(count) {
-        const el = document.getElementById('results-count');
-        if (el) el.textContent = `${count} resultado${count !== 1 ? 's' : ''}`;
+        var el = document.getElementById('results-count');
+        if (el) el.textContent = count + ' resultado' + (count !== 1 ? 's' : '');
+        // Update mobile toggle badge
+        var badge = document.getElementById('toggle-count-badge');
+        if (badge) badge.textContent = count > 0 ? count : '';
     }
 
-    // escHtml is also defined in barbershops-map.js but we keep a local copy
-    // to avoid ordering dependencies in the rare case the script loads late.
+    // escHtml is also in barbershops-map.js; kept here to avoid ordering dependencies
     function escHtml(str) {
         if (!str) return '';
         return String(str)

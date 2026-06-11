@@ -28,16 +28,12 @@ namespace WebApplication1.Controllers
             _googlePlaces = googlePlaces;
         }
 
-        // GET: /Barbershops — About/info page
-        public async Task<IActionResult> Index()
+        // GET: /Barbershops — Split-screen Live Map
+        public IActionResult Index()
         {
-            var barbershops = await _context.Barbershops
-                .Where(b => b.IsActive)
-                .OrderByDescending(b => b.AverageRating)
-                .Take(6)
-                .ToListAsync();
-
-            return View(barbershops);
+            var testKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY_TEST");
+            ViewData["GoogleApiKey"] = !string.IsNullOrWhiteSpace(testKey) ? testKey : (_config["Google:ApiKey"] ?? string.Empty);
+            return View();
         }
 
         // GET: /Barbershops/Details/5
@@ -122,6 +118,65 @@ namespace WebApplication1.Controllers
             }
 
             return Json(results.OrderByDescending(r => (double)r.GetType().GetProperty("rating")!.GetValue(r)!).Take(50));
+        }
+
+        // GET: /Barbershops/GetLiveMarkers?lat=...&lng=...&radius=...
+        [HttpGet]
+        public async Task<IActionResult> GetLiveMarkers(double lat, double lng, int radius = 1500)
+        {
+            // Note: DB sync logic and exact model mapping is centrally handled in MapController's GetLiveMarkers.
+            // But as requested, we provide this endpoint here. To avoid duplicate code, we can just 
+            // delegate to the service directly and let MapController or DbSeeder handle the sync, OR 
+            // implement the sync here as well. Let's do the sync here to fully satisfy the requirement.
+            
+            radius = Math.Clamp(radius, 100, 50_000);
+            var liveResults = await _googlePlaces.FetchLiveBarbershopsAsync(lat, lng, radius);
+
+            if (liveResults.Count == 0) return Json(new object[] {});
+
+            var incomingIds = liveResults.Select(r => r.PlaceId).ToList();
+            var existingBarbershops = await _context.Barbershops
+                .Where(b => b.GooglePlaceId != null && incomingIds.Contains(b.GooglePlaceId))
+                .Select(b => b.GooglePlaceId!)
+                .ToListAsync();
+            var existingSet = new HashSet<string>(existingBarbershops);
+            var now = DateTime.UtcNow;
+
+            foreach (var vm in liveResults)
+            {
+                if (string.IsNullOrWhiteSpace(vm.PlaceId)) continue;
+                if (!existingSet.Contains(vm.PlaceId))
+                {
+                    _context.Barbershops.Add(new Barbershop
+                    {
+                        Name          = vm.Name,
+                        Address       = vm.Address ?? string.Empty,
+                        Latitude      = vm.Lat,
+                        Longitude     = vm.Lng,
+                        PhoneNumber   = vm.PhoneNumber,
+                        AverageRating = vm.Rating ?? 0,
+                        GooglePlaceId = vm.PlaceId,
+                        PlaceId       = vm.PlaceId, // fallback
+                        Category      = BarbershopCategory.Barbershop, // Simplify for this endpoint
+                        IsActive      = true,
+                        CreatedAt     = now
+                    });
+                }
+            }
+
+            try { await _context.SaveChangesAsync(); } catch { /* ignore for live render */ }
+
+            return Json(liveResults.Select(vm => new
+            {
+                placeId = vm.PlaceId,
+                name = vm.Name,
+                address = vm.Address,
+                lat = vm.Lat,
+                lng = vm.Lng,
+                rating = vm.Rating,
+                userRatingsTotal = vm.UserRatingsTotal,
+                photoUrl = vm.PhotoUrl
+            }));
         }
 
         // GET: /Barbershops/GetReviews?placeId=...

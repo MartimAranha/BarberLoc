@@ -60,8 +60,9 @@ namespace WebApplication1
                     var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
                     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
                     var config = services.GetRequiredService<IConfiguration>();
+                    var googleService = services.GetService<IGooglePlacesService>();
 
-                    await DbSeeder.SeedAsync(config, context, userManager, roleManager);
+                    await DbSeeder.SeedAsync(config, context, userManager, roleManager, googleService);
                 }
                 catch (Exception ex)
                 {

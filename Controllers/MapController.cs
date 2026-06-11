@@ -13,11 +13,10 @@ namespace WebApplication1.Controllers
     /// Dedicated controller for the interactive barbershop map page at <c>/Map</c>.
     /// Responsibilities:
     ///   - Serve the initial map view pre-populated with <see cref="BarberShopPlace"/> seed records.
-    ///   - Provide an AJAX endpoint (<c>GET /Map/Details</c>) that the JS calls on marker click
-    ///     to retrieve full place details without redirecting to Google Maps.
-    ///   - Determine Demo Mode: when <c>Google:PlacesApiKey</c> is absent/empty or
-    ///     <c>Google:DemoMode = true</c> is set explicitly, all live API calls are skipped
-    ///     and local seed / mock data is used instead.
+    ///   - Provide <c>GET /Map/GetLiveMarkers</c> — an AJAX endpoint the JS calls on map pan/zoom
+    ///     to fetch real-time Google Places data, upsert it to the DB, and return live JSON markers.
+    ///   - Provide <c>GET /Map/Details</c> — called by JS on marker click to get full place details
+    ///     (photos, reviews, opening hours) without redirecting away from the app.
     /// </summary>
     public class MapController : Controller
     {
@@ -38,46 +37,38 @@ namespace WebApplication1.Controllers
             _logger = logger;
         }
 
-        // ── Demo Mode Helper ───────────────────────────────────────────────────
-        // Centralised logic: demo mode when no valid API key is present OR
-        // the operator has explicitly forced it via Google:DemoMode = true.
+        // ── Live Mode Helper ───────────────────────────────────────────────────
+        // Returns true when a valid Places API key is configured, enabling live
+        // Google Places Nearby Search calls and dynamic marker refresh on pan/zoom.
 
-        private bool ResolveDemoMode()
+        private bool IsLiveMode()
         {
-            // Explicit override takes priority
-            if (_config.GetValue<bool>("Google:DemoMode"))
-                return true;
-
-            // Absent or whitespace-only API key → demo mode
             var key = _config["Google:PlacesApiKey"]
                    ?? _config["Google:ApiKey"]
-                   ?? _config["GoogleMaps:ApiKey"]
                    ?? string.Empty;
-
-            return string.IsNullOrWhiteSpace(key);
+            return !string.IsNullOrWhiteSpace(key);
         }
 
         // GET /Map  or  GET /Map/Index
-        // Renders the map view with all BarberShopPlace records serialised into the JS variable.
-        // The Google Maps API key is passed via the ViewModel — it is injected into the <script src> tag
-        // server-side and never written into client-visible JSON.
+        // Renders the split-screen map view. Seeded BarberShopPlace records are serialised into
+        // the inline JS variable for instant first paint. The JS then calls GetLiveMarkers on
+        // pan/zoom to overlay real-time Google Places data on top.
         public async Task<IActionResult> Index()
         {
-            var isDemoMode = ResolveDemoMode();
+            var isLive = IsLiveMode();
 
-            // Read Maps JS API key (separate from Places API key — used only for the tile layer if ever switched)
+            // Places API key — kept server-side; never written to client-visible JSON
             var mapsApiKey = _config["GoogleMaps:ApiKey"]
                           ?? _config["Google:PlacesApiKey"]
                           ?? _config["Google:ApiKey"]
                           ?? string.Empty;
 
-            // Fetch all seeded / cached BarberShopPlace records from the DB
+            // Load cached/seeded BarberShopPlace records for the initial marker set
             var places = await _context.BarberShopPlaces
                 .AsNoTracking()
                 .OrderByDescending(p => p.Rating)
                 .ToListAsync();
 
-            // Map entity → ViewModel — Category is now stored on BarberShopPlace, so no join needed
             var shopViewModels = places.Select(p => new BarberShopPlaceViewModel
             {
                 PlaceId          = p.PlaceId,
@@ -91,8 +82,8 @@ namespace WebApplication1.Controllers
                 Lng              = p.Longitude,
                 OpeningHoursJson = p.OpeningHoursJson,
                 PhotoReference   = p.PhotoReference,
-                Category         = p.Category.ToString(),   // "Barbershop" | "HairSalon" | "Unisex"
-                IsDemoMode       = isDemoMode
+                Category         = p.Category.ToString(),
+                IsDemoMode       = false   // always false — live mode only
             });
 
             var viewModel = new MapPageViewModel
@@ -101,18 +92,205 @@ namespace WebApplication1.Controllers
                 GoogleMapsApiKey = mapsApiKey,
                 DefaultLatitude  = 38.7169,
                 DefaultLongitude = -9.1399,
-                IsDemoMode       = isDemoMode
+                DefaultZoom      = 14,
+                HasApiKey        = isLive,
+                IsDemoMode       = false   // demo mode permanently disabled
             };
 
             return View(viewModel);
+        }
+
+        // GET /Map/GetMarkers
+        // Lightweight AJAX endpoint — returns cached/seeded BarberShopPlace records as flat JSON.
+        // Supports optional server-side filtering via `category` and `minRating` query-string params.
+        // The Google API key is never included in this response.
+        [HttpGet]
+        public async Task<IActionResult> GetMarkers(string? category = null, double? minRating = null)
+        {
+            var query = _context.BarberShopPlaces.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(category) &&
+                Enum.TryParse<BarbershopCategory>(category, ignoreCase: true, out var parsedCat))
+                query = query.Where(p => p.Category == parsedCat);
+
+            if (minRating.HasValue)
+                query = query.Where(p => p.Rating >= minRating.Value);
+
+            var places = await query
+                .OrderByDescending(p => p.Rating)
+                .ToListAsync();
+
+            var markers = places.Select(p => new
+            {
+                placeId          = p.PlaceId,
+                name             = p.Name,
+                address          = p.Address,
+                phoneNumber      = p.PhoneNumber,
+                website          = p.Website,
+                rating           = p.Rating,
+                userRatingsTotal = p.UserRatingsTotal,
+                lat              = p.Latitude,
+                lng              = p.Longitude,
+                category         = p.Category.ToString(),
+                isDemoMode       = false
+            });
+
+            return Json(markers);
+        }
+
+        // GET /Map/GetLiveMarkers?lat=…&lng=…&radius=…
+        // Primary AJAX endpoint called by the Leaflet map on every dragend/zoomend event.
+        // Fetches real-time barbershop data from Google Places (dual-type: hair_care + barber),
+        // upserts results into BarberShopPlace (cache) and Barbershop (bookings) tables,
+        // then returns the merged, deduplicated list as JSON for the JS to render as markers.
+        // All upserts are guarded by PlaceId uniqueness — safe to call on every pan.
+        [HttpGet]
+        public async Task<IActionResult> GetLiveMarkers(double lat, double lng, int radius = 1500)
+        {
+            // Validate coordinates
+            if (lat is < -90 or > 90 || lng is < -180 or > 180)
+                return BadRequest(new { success = false, message = "Invalid coordinates." });
+
+            radius = Math.Clamp(radius, 100, 50_000);
+
+            // ── 1. Fetch live results from Google Places API (dual-type, cached 10 min) ─
+            var liveResults = await _placesService.FetchLiveBarbershopsAsync(lat, lng, radius);
+
+            if (liveResults.Count == 0)
+            {
+                // No live data — serve whatever is cached in BarberShopPlaces table
+                var cached = await _context.BarberShopPlaces
+                    .AsNoTracking()
+                    .OrderByDescending(p => p.Rating)
+                    .Select(p => new
+                    {
+                        placeId          = p.PlaceId,
+                        name             = p.Name,
+                        address          = p.Address,
+                        rating           = p.Rating,
+                        userRatingsTotal = p.UserRatingsTotal,
+                        lat              = p.Latitude,
+                        lng              = p.Longitude,
+                        category         = p.Category.ToString(),
+                        isDemoMode       = false,
+                        isLive           = false
+                    })
+                    .ToListAsync();
+
+                return Json(cached);
+            }
+
+            // ── 2. Upsert into BarberShopPlace (map cache) and Barbershop (bookings) ──
+            // Collect existing PlaceIds in a single DB round-trip to minimise queries
+            var incomingIds = liveResults.Select(r => r.PlaceId).ToList();
+
+            var existingPlaces = await _context.BarberShopPlaces
+                .Where(b => incomingIds.Contains(b.PlaceId))
+                .Select(b => b.PlaceId)
+                .ToListAsync();
+            var existingPlacesSet = existingPlaces != null
+                ? new HashSet<string>(existingPlaces)
+                : new HashSet<string>();
+
+            var existingBarbershops = await _context.Barbershops
+                .Where(b => b.GooglePlaceId != null && incomingIds.Contains(b.GooglePlaceId))
+                .Select(b => b.GooglePlaceId!)
+                .ToListAsync();
+            var existingBarbershopsSet = existingBarbershops != null
+                ? new HashSet<string>(existingBarbershops)
+                : new HashSet<string>();
+
+            var now = DateTime.UtcNow;
+
+            foreach (var vm in liveResults)
+            {
+                if (string.IsNullOrWhiteSpace(vm.PlaceId)) continue;
+
+                // ── Upsert BarberShopPlace (map cache table) ──────────────────────────
+                if (!existingPlacesSet.Contains(vm.PlaceId))
+                {
+                    // Determine category heuristically from name (Google tags are unreliable for category)
+                    var inferredCategory = InferCategory(vm.Name);
+
+                    _context.BarberShopPlaces.Add(new BarberShopPlace
+                    {
+                        PlaceId          = vm.PlaceId,
+                        Name             = vm.Name,
+                        Address          = vm.Address,
+                        Rating           = vm.Rating,
+                        UserRatingsTotal = vm.UserRatingsTotal,
+                        Latitude         = vm.Lat,
+                        Longitude        = vm.Lng,
+                        PhotoReference   = vm.PhotoReference,
+                        Category         = inferredCategory,
+                        LastFetchedAt    = now
+                    });
+                }
+                else
+                {
+                    // Refresh rating and photo reference on subsequent fetches
+                    await _context.BarberShopPlaces
+                        .Where(b => b.PlaceId == vm.PlaceId)
+                        .ExecuteUpdateAsync(s => s
+                            .SetProperty(b => b.Rating,           vm.Rating)
+                            .SetProperty(b => b.UserRatingsTotal, vm.UserRatingsTotal)
+                            .SetProperty(b => b.PhotoReference,   vm.PhotoReference)
+                            .SetProperty(b => b.LastFetchedAt,    now));
+                }
+
+                // ── Upsert Barbershop (enables bookings & reviews on live places) ─────
+                if (!existingBarbershopsSet.Contains(vm.PlaceId))
+                {
+                    _context.Barbershops.Add(new Barbershop
+                    {
+                        Name          = vm.Name,
+                        Address       = vm.Address ?? string.Empty,
+                        Latitude      = vm.Lat,
+                        Longitude     = vm.Lng,
+                        PhoneNumber   = vm.PhoneNumber,
+                        AverageRating = vm.Rating ?? 0,
+                        GooglePlaceId = vm.PlaceId, // FIX: set GooglePlaceId as required
+                        PlaceId       = vm.PlaceId, // legacy fallback
+                        Category      = InferCategory(vm.Name),
+                        IsActive      = true,
+                        CreatedAt     = now
+                    });
+                }
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "GetLiveMarkers: DB upsert failed — returning live results without persistence.");
+            }
+
+            // ── 3. Return the live marker list as JSON ────────────────────────────────
+            var response = liveResults.Select(vm => new
+            {
+                placeId          = vm.PlaceId,
+                name             = vm.Name,
+                address          = vm.Address,
+                rating           = vm.Rating,
+                userRatingsTotal = vm.UserRatingsTotal,
+                lat              = vm.Lat,
+                lng              = vm.Lng,
+                category         = InferCategory(vm.Name).ToString(),
+                photoUrl         = vm.PhotoUrl,
+                isDemoMode       = false,
+                isLive           = true
+            });
+
+            return Json(response);
         }
 
         // GET /Map/GetDetails/{id}
         // AJAX-only endpoint called by Map/Index.cshtml JS when the user clicks a BarberShopPlace marker.
         // Fetches the Barbershop record from DB by integer ID, calls GooglePlacesService for live data,
         // and returns a fully consolidated BarbershopDetailsViewModel as JSON.
-        // In Demo Mode: uses local DB Review records as the primary review source; falls back to
-        // random mock text only when no DB reviews exist.
+        // Priority for reviews: Google API → local DB Reviews → empty list.
         // Never redirects. Google API key never leaves the server.
         [HttpGet]
         public async Task<IActionResult> GetDetails(int id)
@@ -124,7 +302,6 @@ namespace WebApplication1.Controllers
             if (barbershop == null)
                 return NotFound(new { success = false, message = "Barbearia não encontrada." });
 
-            var isDemoMode = ResolveDemoMode();
             PlaceDetailsResult? googleData = null;
 
             if (!string.IsNullOrWhiteSpace(barbershop.PlaceId))
@@ -151,49 +328,13 @@ namespace WebApplication1.Controllers
                 }).ToList();
 
             // ── Resolve reviews ────────────────────────────────────────────────
-            // Priority: local DB Reviews → Google API reviews → random mock
+            // Priority: Google API reviews → local DB reviews (for places without PlaceId)
             List<PlaceReviewViewModel> reviews;
 
-            if (isDemoMode || (googleData?.IsMockData == true))
+            if (googleData?.Reviews is { Count: > 0 })
             {
-                // Prefer deterministic local DB reviews for a better demo experience
-                var dbReviews = await _context.Reviews
-                    .AsNoTracking()
-                    .Include(r => r.User)
-                    .Where(r => r.BarbershopId == barbershop.Id)
-                    .OrderByDescending(r => r.CreatedAt)
-                    .Take(5)
-                    .ToListAsync();
-
-                if (dbReviews.Any())
-                {
-                    reviews = dbReviews.Select(r => new PlaceReviewViewModel
-                    {
-                        AuthorName              = r.User?.FullName ?? "Utilizador",
-                        ProfilePhotoUrl         = null,
-                        Rating                  = r.Rating,
-                        RelativeTimeDescription = FormatRelativeTime(r.CreatedAt),
-                        Text                    = r.Comment
-                    }).ToList();
-                }
-                else
-                {
-                    // No DB reviews → fall through to whatever the service returned (random mock)
-                    reviews = (googleData?.Reviews ?? new List<PlaceReview>())
-                        .Select(r => new PlaceReviewViewModel
-                        {
-                            AuthorName              = r.AuthorName,
-                            ProfilePhotoUrl         = r.ProfilePhotoUrl,
-                            Rating                  = r.Rating,
-                            RelativeTimeDescription = r.RelativeTimeDescription,
-                            Text                    = r.Text
-                        }).ToList();
-                }
-            }
-            else
-            {
-                // Live mode: use Google API reviews directly
-                reviews = (googleData?.Reviews ?? new List<PlaceReview>())
+                // Live Google reviews — the primary source in live mode
+                reviews = googleData.Reviews
                     .Select(r => new PlaceReviewViewModel
                     {
                         AuthorName              = r.AuthorName,
@@ -202,6 +343,26 @@ namespace WebApplication1.Controllers
                         RelativeTimeDescription = r.RelativeTimeDescription,
                         Text                    = r.Text
                     }).ToList();
+            }
+            else
+            {
+                // Fallback: load local DB reviews (useful for seeded places or when Google returns no reviews)
+                var dbReviews = await _context.Reviews
+                    .AsNoTracking()
+                    .Include(r => r.User)
+                    .Where(r => r.BarbershopId == barbershop.Id)
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Take(5)
+                    .ToListAsync();
+
+                reviews = dbReviews.Select(r => new PlaceReviewViewModel
+                {
+                    AuthorName              = r.User?.FullName ?? "Utilizador",
+                    ProfilePhotoUrl         = null,
+                    Rating                  = r.Rating,
+                    RelativeTimeDescription = FormatRelativeTime(r.CreatedAt),
+                    Text                    = r.Comment
+                }).ToList();
             }
 
             // ── Check favourited state for authenticated users ──────────────────
@@ -231,7 +392,6 @@ namespace WebApplication1.Controllers
                 Website       = googleData?.Website,
                 AverageRating = barbershop.AverageRating,
                 Category      = barbershop.Category,
-                // Live Google Places data (null when API unavailable — JS handles gracefully)
                 GoogleRating      = googleData?.Rating,
                 UserRatingsTotal  = googleData?.UserRatingsTotal,
                 GoogleMapsUrl     = googleData?.GoogleMapsUrl,
@@ -239,7 +399,7 @@ namespace WebApplication1.Controllers
                 WeekdayText       = googleData?.OpeningHours?.WeekdayText ?? new List<string>(),
                 Photos            = photos,
                 Reviews           = reviews,
-                IsMockData        = isDemoMode || (googleData?.IsMockData ?? false),
+                IsMockData        = googleData?.IsMockData ?? false,
                 IsFavourited      = isFavourited
             };
 
@@ -249,7 +409,7 @@ namespace WebApplication1.Controllers
                 id                   = viewModel.Id,
                 googlePlaceId        = viewModel.GooglePlaceId,
                 isMock               = viewModel.IsMockData,
-                isDemoMode           = isDemoMode,
+                isDemoMode           = false,
                 name                 = viewModel.Name,
                 description          = viewModel.Description,
                 formattedAddress     = viewModel.Address,
@@ -271,14 +431,12 @@ namespace WebApplication1.Controllers
 
         // GET /Map/Details?placeId={placeId}
         // AJAX-only endpoint called by barbershops-map.js when the user clicks a marker.
-        // Returns full place details as JSON. Never redirects. No external Google Maps links in the response.
+        // Returns full live place details as JSON. Never redirects. Google API key never leaves the server.
         [HttpGet]
         public async Task<IActionResult> Details(string? placeId)
         {
             if (string.IsNullOrWhiteSpace(placeId))
                 return BadRequest(new { success = false, message = "placeId é obrigatório." });
-
-            var isDemoMode = ResolveDemoMode();
 
             try
             {
@@ -300,8 +458,8 @@ namespace WebApplication1.Controllers
                 return Json(new
                 {
                     success              = true,
-                    isMock               = result.IsMockData || isDemoMode,
-                    isDemoMode           = isDemoMode,
+                    isMock               = result.IsMockData,
+                    isDemoMode           = false,
                     placeId              = result.PlaceId,
                     name                 = result.Name,
                     formattedAddress     = result.FormattedAddress,
@@ -350,6 +508,26 @@ namespace WebApplication1.Controllers
                 < 365  => $"há {(int)(delta.TotalDays / 30)} meses",
                 _      => $"há {(int)(delta.TotalDays / 365)} anos"
             };
+        }
+
+        /// <summary>
+        /// Infers <see cref="BarbershopCategory"/> from a place name.
+        /// Google's Nearby Search type field is broad (hair_care covers both barbers and salons),
+        /// so we use the name as a heuristic to set a meaningful category for marker colouring.
+        /// </summary>
+        private static BarbershopCategory InferCategory(string name)
+        {
+            var lower = name.ToLowerInvariant();
+            if (lower.Contains("cabeleireiro") || lower.Contains("salão") ||
+                lower.Contains("salon")        || lower.Contains("beauty") ||
+                lower.Contains("spa")          || lower.Contains("nails")  ||
+                lower.Contains("unhas"))
+                return BarbershopCategory.HairSalon;
+
+            if (lower.Contains("unisex") || lower.Contains("hair"))
+                return BarbershopCategory.Unisex;
+
+            return BarbershopCategory.Barbershop;
         }
     }
 }

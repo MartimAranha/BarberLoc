@@ -4,8 +4,9 @@ using WebApplication1.Models.ViewModels;
 namespace WebApplication1.Services
 {
     /// <summary>
-    /// Abstraction over the Google Places Details API.
-    /// Implementations must support both live API calls and graceful fallback to mock data.
+    /// Abstraction over the Google Places API.
+    /// Provides live Nearby Search, full place details (photos, reviews, hours), and a
+    /// multi-layer cache (memory → DB → live API) for place detail requests.
     /// </summary>
     public interface IGooglePlacesService
     {
@@ -22,21 +23,33 @@ namespace WebApplication1.Services
         /// Fetches full place details including photos, opening hours, phone, website, address,
         /// geometry and reviews. Used to populate the interactive map detail panel.
         /// Results are NOT persisted to DB cache (photos/hours change frequently).
-        /// Falls back to a rich mock result when the API is unavailable.
         /// </summary>
         /// <param name="placeId">The Google Places placeId string (e.g. "ChIJ...").</param>
         /// <returns>A <see cref="PlaceDetailsResult"/> or null if placeId is empty.</returns>
         Task<PlaceDetailsResult?> GetFullPlaceDetailsAsync(string placeId);
 
         /// <summary>
-        /// Searches for barbershops near the given coordinates using the Google Places Nearby Search API.
-        /// Falls back to an empty list when the API key is unavailable — the map will then show only seeded records.
+        /// Searches for barbershops near the given coordinates using the Google Places Nearby Search API
+        /// with <c>type=hair_care</c>. Falls back to an empty list when the API key is unavailable.
         /// </summary>
         /// <param name="lat">Centre latitude.</param>
         /// <param name="lng">Centre longitude.</param>
-        /// <param name="radiusMeters">Search radius in metres (max 50000).</param>
+        /// <param name="radiusMeters">Search radius in metres (max 50 000).</param>
         /// <returns>A list of <see cref="Models.ViewModels.BarberShopPlaceViewModel"/> ready for map rendering.</returns>
         Task<IEnumerable<Models.ViewModels.BarberShopPlaceViewModel>> SearchNearbyBarbershopsAsync(double lat, double lng, int radiusMeters);
+
+        /// <summary>
+        /// Performs a live dual-type Nearby Search (type=hair_care AND type=barber) concurrently,
+        /// merges and deduplicates the results by place_id, and returns a combined list.
+        /// This is the primary method for the <c>GET /Map/GetLiveMarkers</c> endpoint.
+        /// Returns an empty collection when the API key is absent or both requests fail.
+        /// Results are cached in memory for 10 minutes per lat/lng/radius combination.
+        /// </summary>
+        /// <param name="lat">Centre latitude.</param>
+        /// <param name="lng">Centre longitude.</param>
+        /// <param name="radiusInMeters">Search radius in metres (clamped to 50 000).</param>
+        /// <returns>A deduplicated, merged <see cref="IReadOnlyList{BarberShopPlaceViewModel}"/>.</returns>
+        Task<IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel>> FetchLiveBarbershopsAsync(double lat, double lng, int radiusInMeters);
     }
 
     /// <summary>
