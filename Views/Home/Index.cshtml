@@ -1,105 +1,830 @@
-﻿@model IEnumerable<WebApplication1.Models.Barbershop>
-
+@*
+    Home/Index.cshtml — BarberLoc Landing Page
+    Model: none (ViewData-only)
+    All dynamic barbershop data is fetched live at /Map via the Google Places API.
+    "Começar Agora" navigates to Map/Index — the interactive live Leaflet/OSM map.
+*@
 @{
     ViewData["Title"] = "Início";
+    var hasApiKey = ViewData["HasApiKey"] is bool b && b;
 }
 
-<!-- Hero Section -->
-<div class="hero-section">
+<meta name="description"
+      content="BarberLoc — encontre as melhores barbearias e salões de beleza perto de si. Avaliações reais, horários e reservas online." />
+
+@* ══════════════════════════════════════════════════════════════════════════════
+   PAGE-SCOPED STYLES
+   ══════════════════════════════════════════════════════════════════════════════ *@
+<style>
+    /* ── Typography & Base ───────────────────────────────────────────────────── */
+    body { font-family: 'Outfit', system-ui, sans-serif; }
+
+    /* ── Hero ────────────────────────────────────────────────────────────────── */
+    .bl-hero {
+        position: relative;
+        min-height: 92vh;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        background: linear-gradient(135deg, #0a0f1e 0%, #0d1b3e 45%, #061124 100%);
+    }
+
+    /* Animated floating orbs */
+    .bl-hero::before,
+    .bl-hero::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(90px);
+        opacity: 0.18;
+        animation: orb-drift 12s ease-in-out infinite alternate;
+        pointer-events: none;
+    }
+
+    .bl-hero::before {
+        width: 520px;
+        height: 520px;
+        background: #3b5bdb;
+        top: -10%;
+        right: -8%;
+        animation-duration: 15s;
+    }
+
+    .bl-hero::after {
+        width: 380px;
+        height: 380px;
+        background: #0ca678;
+        bottom: -12%;
+        left: -6%;
+        animation-duration: 18s;
+        animation-delay: -6s;
+    }
+
+    @@keyframes orb-drift {
+        0%   { transform: translate(0, 0) scale(1); }
+        100% { transform: translate(30px, -40px) scale(1.08); }
+    }
+
+    /* Grid dots pattern */
+    .bl-hero-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+            radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+        background-size: 42px 42px;
+        pointer-events: none;
+    }
+
+    .bl-hero-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .bl-hero-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #4f7cf0;
+        background: rgba(79, 124, 240, 0.12);
+        border: 1px solid rgba(79, 124, 240, 0.25);
+        padding: 0.35rem 0.9rem;
+        border-radius: 2rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .bl-hero-title {
+        font-size: clamp(2.6rem, 6vw, 4.5rem);
+        font-weight: 800;
+        line-height: 1.1;
+        color: #f0f4ff;
+        letter-spacing: -0.03em;
+        margin-bottom: 1.4rem;
+    }
+
+    .bl-hero-title .accent {
+        background: linear-gradient(90deg, #4f7cf0, #0ca678);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .bl-hero-sub {
+        font-size: 1.15rem;
+        color: rgba(224, 231, 255, 0.65);
+        max-width: 520px;
+        line-height: 1.65;
+        margin-bottom: 2.2rem;
+    }
+
+    /* Primary CTA */
+    .btn-hero-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.85rem 2.1rem;
+        font-size: 1rem;
+        font-weight: 700;
+        font-family: inherit;
+        border-radius: 3rem;
+        background: linear-gradient(135deg, #3b5bdb, #4f7cf0);
+        color: #fff;
+        border: none;
+        box-shadow: 0 6px 28px rgba(59, 91, 219, 0.45);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        text-decoration: none;
+    }
+
+    .btn-hero-primary:hover {
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 12px 40px rgba(59, 91, 219, 0.55);
+        filter: brightness(1.08);
+        color: #fff;
+    }
+
+    /* Secondary CTA */
+    .btn-hero-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.85rem 2.1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: inherit;
+        border-radius: 3rem;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(224, 231, 255, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.2s;
+        text-decoration: none;
+    }
+
+    .btn-hero-secondary:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.28);
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    /* Stats row */
+    .bl-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        margin-top: 3rem;
+        padding-top: 2rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .bl-stat-val {
+        font-size: 1.9rem;
+        font-weight: 800;
+        color: #f0f4ff;
+        line-height: 1;
+    }
+
+    .bl-stat-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: rgba(224, 231, 255, 0.4);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-top: 3px;
+    }
+
+    /* Hero mockup card */
+    .bl-hero-mockup {
+        position: relative;
+        z-index: 2;
+    }
+
+    .bl-mockup-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 1.4rem;
+        padding: 1.4rem;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        animation: float-card 6s ease-in-out infinite;
+    }
+
+    @@keyframes float-card {
+        0%, 100% { transform: translateY(0px); }
+        50%       { transform: translateY(-14px); }
+    }
+
+    .bl-map-preview {
+        width: 100%;
+        height: 260px;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, #0d1b3e 0%, #142040 100%);
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+
+    /* Fake map tiles grid */
+    .bl-map-preview::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(rgba(79,124,240,0.08) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(79,124,240,0.08) 1px, transparent 1px);
+        background-size: 32px 32px;
+    }
+
+    .bl-map-pin {
+        position: absolute;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        border: 2.5px solid rgba(255,255,255,0.85);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        transition: transform 0.3s ease;
+        cursor: default;
+    }
+
+    .bl-map-pin:hover { transform: scale(1.2); }
+
+    .bl-mockup-shops { display: flex; flex-direction: column; gap: 0.6rem; }
+
+    .bl-mockup-shop-row {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.55rem 0.7rem;
+        border-radius: 0.7rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .bl-mockup-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .bl-mockup-shop-name {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .bl-mockup-rating {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #f9c74f;
+        white-space: nowrap;
+    }
+
+    /* ── Features Section ────────────────────────────────────────────────────── */
+    .bl-features {
+        background: #070c18;
+        padding: 6rem 0;
+    }
+
+    .section-eyebrow {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #4f7cf0;
+        margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+        font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+        font-weight: 800;
+        color: #f0f4ff;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        margin-bottom: 1rem;
+    }
+
+    .section-sub {
+        font-size: 1rem;
+        color: rgba(224,231,255,0.5);
+        max-width: 500px;
+        margin: 0 auto;
+        line-height: 1.7;
+    }
+
+    .bl-feature-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 1.2rem;
+        padding: 2rem 1.6rem;
+        height: 100%;
+        transition: background 0.25s, border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .bl-feature-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--feature-accent, #3b5bdb);
+        opacity: 0;
+        transition: opacity 0.25s;
+    }
+
+    .bl-feature-card:hover {
+        background: rgba(255,255,255,0.06);
+        border-color: rgba(255,255,255,0.13);
+        transform: translateY(-5px);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+    }
+
+    .bl-feature-card:hover::before { opacity: 1; }
+
+    .bl-feature-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        margin-bottom: 1.2rem;
+        flex-shrink: 0;
+    }
+
+    .bl-feature-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #e2e8f0;
+        margin-bottom: 0.5rem;
+    }
+
+    .bl-feature-desc {
+        font-size: 0.9rem;
+        color: rgba(224,231,255,0.45);
+        line-height: 1.65;
+        margin: 0;
+    }
+
+    /* ── How It Works ────────────────────────────────────────────────────────── */
+    .bl-howitworks {
+        background: #0a0f1e;
+        padding: 6rem 0;
+    }
+
+    .bl-step {
+        display: flex;
+        gap: 1.4rem;
+        align-items: flex-start;
+    }
+
+    .bl-step-number {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #3b5bdb, #4f7cf0);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        font-weight: 800;
+        color: #fff;
+        flex-shrink: 0;
+        box-shadow: 0 4px 16px rgba(59,91,219,0.4);
+    }
+
+    .bl-step-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #e2e8f0;
+        margin-bottom: 0.35rem;
+    }
+
+    .bl-step-desc {
+        font-size: 0.88rem;
+        color: rgba(224,231,255,0.45);
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    /* ── CTA Banner ──────────────────────────────────────────────────────────── */
+    .bl-cta-banner {
+        background: linear-gradient(135deg, #0d1b3e 0%, #1a2a5c 100%);
+        border-top: 1px solid rgba(79,124,240,0.15);
+        border-bottom: 1px solid rgba(79,124,240,0.15);
+        padding: 5rem 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .bl-cta-banner::before {
+        content: '';
+        position: absolute;
+        width: 600px;
+        height: 600px;
+        border-radius: 50%;
+        background: rgba(59,91,219,0.12);
+        filter: blur(80px);
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+
+    .bl-cta-title {
+        font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+        font-weight: 800;
+        color: #f0f4ff;
+        letter-spacing: -0.02em;
+        margin-bottom: 1rem;
+    }
+
+    .bl-cta-sub {
+        font-size: 1rem;
+        color: rgba(224,231,255,0.55);
+        max-width: 460px;
+        margin: 0 auto 2rem;
+        line-height: 1.65;
+    }
+</style>
+
+@* ══════════════════════════════════════════════════════════════════════════════
+   HERO SECTION
+   ══════════════════════════════════════════════════════════════════════════════ *@
+<section class="bl-hero" aria-label="Bem-vindo ao BarberLoc">
+    <div class="bl-hero-grid" aria-hidden="true"></div>
+    <div class="container py-5">
+        <div class="row align-items-center gy-5">
+
+            @* ── Left: Copy + CTAs ──────────────────────────────────────────── *@
+            <div class="col-lg-6 bl-hero-content">
+
+                <div class="bl-hero-eyebrow" aria-label="Novidade">
+                    <i class="fas fa-location-dot" aria-hidden="true"></i>
+                    Encontre perto de si — em tempo real
+                </div>
+
+                <h1 class="bl-hero-title">
+                    A melhor<br>
+                    barbearia<br>
+                    <span class="accent">a um clique</span>
+                </h1>
+
+                <p class="bl-hero-sub">
+                    O BarberLoc usa o Google Maps para mostrar barbearias e salões
+                    reais perto de si — com avaliações, horários e fotos actualizadas
+                    em tempo real.
+                </p>
+
+                <div class="d-flex flex-wrap gap-3">
+                    @* PRIMARY CTA: navigates to the live interactive map *@
+                    <a asp-controller="Map" asp-action="Index"
+                       class="btn-hero-primary"
+                       id="btn-comecar-agora"
+                       aria-label="Abrir o mapa interativo de barbearias">
+                        <i class="fas fa-map-location-dot" aria-hidden="true"></i>
+                        Começar Agora
+                    </a>
+
+                    @if (User.Identity?.IsAuthenticated != true)
+                    {
+                        <a asp-area="Identity" asp-page="/Account/Register"
+                           class="btn-hero-secondary"
+                           id="btn-criar-conta"
+                           aria-label="Criar conta gratuita">
+                            <i class="fas fa-user-plus" aria-hidden="true"></i>
+                            Criar Conta Grátis
+                        </a>
+                    }
+                    else
+                    {
+                        <a asp-controller="Bookings" asp-action="Index"
+                           class="btn-hero-secondary"
+                           id="btn-minhas-reservas"
+                           aria-label="Ver minhas reservas">
+                            <i class="fas fa-calendar-check" aria-hidden="true"></i>
+                            Minhas Reservas
+                        </a>
+                    }
+                </div>
+
+                @* Social proof stats *@
+                <div class="bl-stats" aria-label="Estatísticas da plataforma">
+                    <div>
+                        <div class="bl-stat-val">@(hasApiKey ? "Live" : "Demo")</div>
+                        <div class="bl-stat-label">Modo de dados</div>
+                    </div>
+                    <div>
+                        <div class="bl-stat-val">Google</div>
+                        <div class="bl-stat-label">Places API</div>
+                    </div>
+                    <div>
+                        <div class="bl-stat-val">PT&nbsp;🇵🇹</div>
+                        <div class="bl-stat-label">Mercado</div>
+                    </div>
+                </div>
+            </div>
+
+            @* ── Right: Animated Map Mockup ──────────────────────────────────── *@
+            <div class="col-lg-6 d-none d-lg-block bl-hero-mockup" aria-hidden="true">
+                <div class="bl-mockup-card">
+                    @* Fake map with animated pins *@
+                    <div class="bl-map-preview" role="img" aria-label="Pré-visualização do mapa">
+                        <div class="bl-map-pin"
+                             style="background:#3b5bdb; top:28%; left:38%;"
+                             title="Barbearia Clássica Lisboa">4.8</div>
+                        <div class="bl-map-pin"
+                             style="background:#d6336c; top:52%; left:60%;"
+                             title="Salão Elegance">4.6</div>
+                        <div class="bl-map-pin"
+                             style="background:#0ca678; top:68%; left:30%;"
+                             title="UrbanCuts">4.5</div>
+                        <div class="bl-map-pin"
+                             style="background:#3b5bdb; top:18%; left:65%;"
+                             title="Fade Factory">4.9</div>
+                        <div class="bl-map-pin"
+                             style="background:#d6336c; top:75%; left:72%;"
+                             title="Cabeleireiro Alfama">4.3</div>
+                    </div>
+                    @* Sidebar preview *@
+                    <div class="bl-mockup-shops">
+                        <div class="bl-mockup-shop-row">
+                            <div class="bl-mockup-dot" style="background:#3b5bdb;"></div>
+                            <span class="bl-mockup-shop-name">Fade Factory Lisboa</span>
+                            <span class="bl-mockup-rating">★ 4.9</span>
+                        </div>
+                        <div class="bl-mockup-shop-row">
+                            <div class="bl-mockup-dot" style="background:#3b5bdb;"></div>
+                            <span class="bl-mockup-shop-name">Barbearia Clássica</span>
+                            <span class="bl-mockup-rating">★ 4.8</span>
+                        </div>
+                        <div class="bl-mockup-shop-row">
+                            <div class="bl-mockup-dot" style="background:#d6336c;"></div>
+                            <span class="bl-mockup-shop-name">Salão Elegance Cascais</span>
+                            <span class="bl-mockup-rating">★ 4.6</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ══════════════════════════════════════════════════════════════════════════════
+   FEATURES SECTION
+   ══════════════════════════════════════════════════════════════════════════════ *@
+<section class="bl-features" id="funcionalidades" aria-labelledby="features-title">
     <div class="container">
-        <h1 class="fade-in"><i class="fas fa-cut"></i> Bem-vindo ao BarberLoc</h1>
-        <p class="fade-in">Encontre as melhores barbearias perto de você. Rápido, prático e conveniente!</p>
-        <a asp-controller="Barbershops" asp-action="Index" class="btn btn-primary btn-lg me-2">
-            <i class="fas fa-search"></i> Procurar Barbearias
+        <div class="text-center mb-5">
+            <p class="section-eyebrow">Funcionalidades</p>
+            <h2 class="section-title" id="features-title">Porquê o BarberLoc?</h2>
+            <p class="section-sub">
+                Tudo o que precisa para encontrar, avaliar e reservar a barbearia
+                certa — numa única plataforma.
+            </p>
+        </div>
+
+        <div class="row g-4">
+            @* Feature 1 *@
+            <div class="col-md-6 col-lg-4">
+                <div class="bl-feature-card" style="--feature-accent:#3b5bdb;">
+                    <div class="bl-feature-icon"
+                         style="background:rgba(59,91,219,0.12); color:#4f7cf0;">
+                        <i class="fas fa-map-location-dot" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="bl-feature-title">Mapa Interativo em Tempo Real</h3>
+                    <p class="bl-feature-desc">
+                        Veja barbearias e salões directamente no mapa, actualizados
+                        com dados reais do Google Places sempre que movimenta a vista.
+                    </p>
+                </div>
+            </div>
+
+            @* Feature 2 *@
+            <div class="col-md-6 col-lg-4">
+                <div class="bl-feature-card" style="--feature-accent:#f9c74f;">
+                    <div class="bl-feature-icon"
+                         style="background:rgba(249,199,79,0.1); color:#f9c74f;">
+                        <i class="fas fa-star" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="bl-feature-title">Avaliações Google Reais</h3>
+                    <p class="bl-feature-desc">
+                        Leia opiniões reais de outros clientes directamente do Google,
+                        com classificações, fotos e horários actualizados.
+                    </p>
+                </div>
+            </div>
+
+            @* Feature 3 *@
+            <div class="col-md-6 col-lg-4">
+                <div class="bl-feature-card" style="--feature-accent:#0ca678;">
+                    <div class="bl-feature-icon"
+                         style="background:rgba(12,166,120,0.1); color:#0ca678;">
+                        <i class="fas fa-calendar-check" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="bl-feature-title">Reservas Online</h3>
+                    <p class="bl-feature-desc">
+                        Reserve o seu horário directamente na plataforma, sem
+                        telefonemas. Confirmação imediata e gestão simples.
+                    </p>
+                </div>
+            </div>
+
+            @* Feature 4 *@
+            <div class="col-md-6 col-lg-4">
+                <div class="bl-feature-card" style="--feature-accent:#d6336c;">
+                    <div class="bl-feature-icon"
+                         style="background:rgba(214,51,108,0.1); color:#d6336c;">
+                        <i class="fas fa-clock" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="bl-feature-title">Horários Actualizados</h3>
+                    <p class="bl-feature-desc">
+                        Veja os horários de funcionamento exactos de cada
+                        estabelecimento antes de sair de casa.
+                    </p>
+                </div>
+            </div>
+
+            @* Feature 5 *@
+            <div class="col-md-6 col-lg-4">
+                <div class="bl-feature-card" style="--feature-accent:#7048e8;">
+                    <div class="bl-feature-icon"
+                         style="background:rgba(112,72,232,0.1); color:#7048e8;">
+                        <i class="fas fa-filter" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="bl-feature-title">Filtros Avançados</h3>
+                    <p class="bl-feature-desc">
+                        Filtre por categoria (barbearia, cabeleireiro, unisexo),
+                        avaliação mínima ou pesquise por nome e endereço.
+                    </p>
+                </div>
+            </div>
+
+            @* Feature 6 *@
+            <div class="col-md-6 col-lg-4">
+                <div class="bl-feature-card" style="--feature-accent:#f76707;">
+                    <div class="bl-feature-icon"
+                         style="background:rgba(247,103,7,0.1); color:#f76707;">
+                        <i class="fas fa-heart" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="bl-feature-title">Favoritos</h3>
+                    <p class="bl-feature-desc">
+                        Guarde as suas barbearias favoritas e aceda rapidamente
+                        a elas na próxima visita — disponível com conta gratuita.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ══════════════════════════════════════════════════════════════════════════════
+   HOW IT WORKS SECTION
+   ══════════════════════════════════════════════════════════════════════════════ *@
+<section class="bl-howitworks" id="como-funciona" aria-labelledby="how-title">
+    <div class="container">
+        <div class="row align-items-center gy-5">
+
+            <div class="col-lg-5">
+                <p class="section-eyebrow">Como funciona</p>
+                <h2 class="section-title" id="how-title">
+                    Em 4 passos simples
+                </h2>
+                <p class="section-sub text-start">
+                    Do mapa à cadeira — em menos de um minuto.
+                </p>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="d-flex flex-column gap-4">
+                    <div class="bl-step">
+                        <div class="bl-step-number" aria-hidden="true">1</div>
+                        <div>
+                            <div class="bl-step-title">Abra o mapa interativo</div>
+                            <p class="bl-step-desc">
+                                Clique em "Começar Agora" e o mapa mostra automaticamente
+                                barbearias e salões à sua volta com dados em tempo real
+                                do Google Places.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bl-step">
+                        <div class="bl-step-number" aria-hidden="true">2</div>
+                        <div>
+                            <div class="bl-step-title">Explore e filtre</div>
+                            <p class="bl-step-desc">
+                                Use os filtros de categoria e avaliação mínima, ou pesquise
+                                por nome. Clique num marcador para ver fotos, horários e
+                                avaliações reais.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bl-step">
+                        <div class="bl-step-number" aria-hidden="true">3</div>
+                        <div>
+                            <div class="bl-step-title">Escolha e reserve</div>
+                            <p class="bl-step-desc">
+                                Encontrou a barbearia certa? Reserve um horário directamente
+                                pela plataforma. É rápido e sem complicações.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bl-step">
+                        <div class="bl-step-number" aria-hidden="true">4</div>
+                        <div>
+                            <div class="bl-step-title">Avalie a experiência</div>
+                            <p class="bl-step-desc">
+                                Depois da visita, deixe a sua avaliação e ajude outros
+                                utilizadores a encontrar o melhor serviço.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ══════════════════════════════════════════════════════════════════════════════
+   CTA BANNER
+   ══════════════════════════════════════════════════════════════════════════════ *@
+<section class="bl-cta-banner" aria-labelledby="cta-title">
+    <div class="container text-center position-relative" style="z-index:1;">
+        <h2 class="bl-cta-title" id="cta-title">
+            Pronto para encontrar<br>a sua barbearia ideal?
+        </h2>
+        <p class="bl-cta-sub">
+            @if (hasApiKey)
+            {
+                @:O mapa está a funcionar em modo ao vivo com dados reais do Google Places.
+            }
+            else
+            {
+                @:Configure a sua chave de API do Google Places para activar dados em tempo real.
+            }
+        </p>
+        <a asp-controller="Map" asp-action="Index"
+           class="btn-hero-primary"
+           id="btn-comecar-agora-footer"
+           aria-label="Abrir o mapa interativo">
+            <i class="fas fa-map-location-dot" aria-hidden="true"></i>
+            Começar Agora
         </a>
-        @if (User.Identity?.IsAuthenticated != true)
-        {
-            <a asp-area="Identity" asp-page="/Account/Register" class="btn btn-outline-light btn-lg">
-                <i class="fas fa-user-plus"></i> Criar Conta
-            </a>
+    </div>
+</section>
+
+@* ══════════════════════════════════════════════════════════════════════════════
+   SCROLL FADE-IN ANIMATION
+   ══════════════════════════════════════════════════════════════════════════════ *@
+@section Scripts {
+<script>
+    // Lightweight IntersectionObserver for scroll-triggered fade-ins.
+    // No jQuery dependency — vanilla JS only.
+    (function () {
+        'use strict';
+
+        var targets = document.querySelectorAll('.bl-feature-card, .bl-step');
+
+        if (!('IntersectionObserver' in window)) {
+            // Graceful degradation: just show everything immediately
+            targets.forEach(function (el) { el.style.opacity = '1'; });
+            return;
         }
-    </div>
-</div>
 
-<!-- Features Section -->
-<div class="container my-5">
-    <div class="row text-center mb-5">
-        <div class="col-12">
-            <h2 class="section-title">Porquê Escolher o BarberLoc?</h2>
-        </div>
-    </div>
-    <div class="row g-4">
-        <div class="col-md-4 fade-in">
-            <div class="card h-100 text-center">
-                <div class="card-body">
-                    <div class="mb-3">
-                        <i class="fas fa-map-marked-alt fa-3x text-accent"></i>
-                    </div>
-                    <h5 class="card-title">Localização Fácil</h5>
-                    <p class="card-text">Encontre barbearias próximas de você com base na sua localização atual.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 fade-in">
-            <div class="card h-100 text-center">
-                <div class="card-body">
-                    <div class="mb-3">
-                        <i class="fas fa-calendar-check fa-3x text-accent"></i>
-                    </div>
-                    <h5 class="card-title">Reservas Online</h5>
-                    <p class="card-text">Reserve seu horário diretamente pela plataforma, sem complicações.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 fade-in">
-            <div class="card h-100 text-center">
-                <div class="card-body">
-                    <div class="mb-3">
-                        <i class="fas fa-star fa-3x text-accent"></i>
-                    </div>
-                    <h5 class="card-title">Avaliações Reais</h5>
-                    <p class="card-text">Leia avaliações de outros clientes e escolha a melhor barbearia.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+        // Initial state: hidden + shifted down
+        targets.forEach(function (el) {
+            el.style.opacity    = '0';
+            el.style.transform  = 'translateY(24px)';
+            el.style.transition = 'opacity 0.55s ease, transform 0.55s ease';
+        });
 
-<!-- About Section: what the app is and how it works -->
-<div class="container my-5">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2 class="section-title">Sobre o BarberLoc</h2>
-        </div>
-    </div>
-    <div class="row">
-        <div class="col-lg-8 mx-auto">
-            <div class="card p-4">
-                <h5 class="card-title">O que é o BarberLoc?</h5>
-                <p class="card-text">O BarberLoc é uma plataforma pensada para ajudá-lo a encontrar barbearias próximas, consultar serviços, horários e avaliações, e reservar horários de forma rápida e prática.</p>
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity   = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
 
-                <h6>Como funciona</h6>
-                <ul>
-                    <li>Procure barbearias pela sua localização ou explore a lista completa.</li>
-                    <li>Veja o perfil da barbearia com serviços, fotos, horários e avaliações de clientes.</li>
-                    <li>Reserve um horário disponível e receba confirmação diretamente na plataforma.</li>
-                    <li>Depois da visita, deixe uma avaliação para ajudar outros utilizadores.</li>
-                </ul>
-
-                <p class="mb-0"><strong>Dica:</strong> Utilize o botão "Procurar Barbearias" no topo para começar a explorar agora mesmo.</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Call to Action -->
-<div class="container my-5 py-5">
-    <div class="row">
-        <div class="col-12 text-center">
-            <h3 class="mb-4">Pronto para encontrar a sua barbearia ideal?</h3>
-            <a asp-controller="Barbershops" asp-action="Index" class="btn btn-primary btn-lg">
-                <i class="fas fa-search"></i> Começar Agora
-            </a>
-        </div>
-    </div>
-</div>
+        targets.forEach(function (el) { observer.observe(el); });
+    }());
+</script>
+}

@@ -96,6 +96,7 @@ namespace WebApplication1.Data
                                         GooglePlaceId = googlePlaceId,
                                         Rating        = place.totalScore,
                                         Category      = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
+                                        OperationalStatus = OperationalStatus.Unverified,
                                         IsActive      = true,
                                         CreatedAt     = DateTime.Now,
                                         UpdatedAt     = DateTime.Now
@@ -152,6 +153,7 @@ namespace WebApplication1.Data
                                         AverageRating = p.Rating ?? 0,
                                         GooglePlaceId = p.PlaceId,
                                         Category = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
+                                        OperationalStatus = OperationalStatus.Unverified,
                                         IsActive = true,
                                         CreatedAt = DateTime.Now,
                                         UpdatedAt = DateTime.Now
@@ -605,6 +607,7 @@ namespace WebApplication1.Data
                     GooglePlaceId = "ChIJBarbershopMockIntendente009",
                     Rating        = 4.6,
                     Category      = BarbershopCategory.Barbershop,
+                    OperationalStatus = OperationalStatus.Unverified,
                     IsActive      = true,
                     CreatedAt     = DateTime.Now.AddMonths(-3),
                     UpdatedAt     = DateTime.Now
@@ -647,6 +650,8 @@ namespace WebApplication1.Data
                     GooglePlaceId = "ChIJHairSalonMockBelem010",
                     Rating        = 4.4,
                     Category      = BarbershopCategory.HairSalon,
+                    OperationalStatus = OperationalStatus.Active,
+                    LastVerifiedAt = DateTime.UtcNow.AddDays(-5),
                     IsActive      = true,
                     CreatedAt     = DateTime.Now.AddMonths(-1),
                     UpdatedAt     = DateTime.Now
@@ -696,6 +701,8 @@ namespace WebApplication1.Data
                 GooglePlaceId = "ChIJBarbershopMockLisboa001",
                 Rating        = 4.8,
                 Category      = BarbershopCategory.Barbershop,
+                OperationalStatus = OperationalStatus.Active,
+                LastVerifiedAt = DateTime.UtcNow.AddDays(-1),
                 IsActive      = true,
                 CreatedAt     = DateTime.Now.AddMonths(-6),
                 UpdatedAt     = DateTime.Now
@@ -736,6 +743,8 @@ namespace WebApplication1.Data
                 GooglePlaceId = "ChIJHairSalonMockCascais002",
                 Rating        = 4.6,
                 Category      = BarbershopCategory.HairSalon,
+                OperationalStatus = OperationalStatus.TemporarilyClosed,
+                LastVerifiedAt = DateTime.UtcNow.AddDays(-2),
                 IsActive      = true,
                 CreatedAt     = DateTime.Now.AddMonths(-4),
                 UpdatedAt     = DateTime.Now
@@ -776,7 +785,9 @@ namespace WebApplication1.Data
                 GooglePlaceId = "ChIJBarbershopMockPorto003",
                 Rating        = 4.5,
                 Category      = BarbershopCategory.Unisex,
-                IsActive      = true,
+                OperationalStatus = OperationalStatus.PermanentlyClosed,
+                LastVerifiedAt = DateTime.UtcNow.AddDays(-3),
+                IsActive      = false,
                 CreatedAt     = DateTime.Now.AddMonths(-2),
                 UpdatedAt     = DateTime.Now
             };

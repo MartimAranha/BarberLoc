@@ -45,7 +45,16 @@ namespace WebApplication1.Models
         public double? Rating { get; set; }
         
         public bool IsActive { get; set; } = true;
-        
+
+        /// <summary>
+        /// Operational status sourced from Google Places API <c>business_status</c> field.
+        /// Defaults to <see cref="OperationalStatus.Active"/> so existing rows are not disrupted.
+        /// </summary>
+        public OperationalStatus OperationalStatus { get; set; } = OperationalStatus.Active;
+
+        /// <summary>UTC timestamp of the last successful Google Places verification call for this shop.</summary>
+        public DateTime? LastVerifiedAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
@@ -65,6 +74,29 @@ namespace WebApplication1.Models
         HairSalon,
         [Display(Name = "Unisexo")]
         Unisex
+    }
+
+    /// <summary>
+    /// Reflects the Google Places API <c>business_status</c> field.
+    /// Values map directly to the string constants returned by the Places API.
+    /// </summary>
+    public enum OperationalStatus
+    {
+        /// <summary>Place is open and accepting customers (OPERATIONAL).</summary>
+        [Display(Name = "Activo")]
+        Active = 0,
+
+        /// <summary>Place is permanently closed (CLOSED_PERMANENTLY).</summary>
+        [Display(Name = "Fechado Permanentemente")]
+        PermanentlyClosed = 1,
+
+        /// <summary>Place is temporarily closed (CLOSED_TEMPORARILY).</summary>
+        [Display(Name = "Fechado Temporariamente")]
+        TemporarilyClosed = 2,
+
+        /// <summary>Status not yet verified against the Google Places API.</summary>
+        [Display(Name = "Não Verificado")]
+        Unverified = 3
     }
 
     public enum TargetGender

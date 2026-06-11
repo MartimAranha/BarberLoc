@@ -25,7 +25,7 @@ namespace WebApplication1.Services
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _memoryCache;
         private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _config;
+        private readonly GoogleMapsOptions _options;
         private readonly ILogger<GooglePlacesService> _logger;
 
         private const string CacheKeyPrefix = "google_places_";
@@ -37,13 +37,13 @@ namespace WebApplication1.Services
             HttpClient httpClient,
             IMemoryCache memoryCache,
             ApplicationDbContext context,
-            IConfiguration config,
+            Microsoft.Extensions.Options.IOptions<GoogleMapsOptions> options,
             ILogger<GooglePlacesService> logger)
         {
             _httpClient = httpClient;
             _memoryCache = memoryCache;
             _context = context;
-            _config = config;
+            _options = options.Value;
             _logger = logger;
         }
 
@@ -77,7 +77,7 @@ namespace WebApplication1.Services
             }
 
             // ── Layer 3: Live Google Places API ────────────────────────────────
-            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            var apiKey = !string.IsNullOrWhiteSpace(_options.PlacesApiKey) ? _options.PlacesApiKey : _options.ApiKey;
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 try
@@ -128,7 +128,7 @@ namespace WebApplication1.Services
             if (_memoryCache.TryGetValue(cacheKey, out PlaceDetailsResult? cached) && cached != null)
                 return cached;
 
-            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            var apiKey = !string.IsNullOrWhiteSpace(_options.PlacesApiKey) ? _options.PlacesApiKey : _options.ApiKey;
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 try
@@ -483,13 +483,131 @@ namespace WebApplication1.Services
             };
         }
 
+        // ─── VerifyPlaceStatusAsync ────────────────────────────────────────────────
+
+        /// <inheritdoc />
+        public async Task<PlaceVerificationResult> VerifyPlaceStatusAsync(string placeId)
+        {
+            if (string.IsNullOrWhiteSpace(placeId))
+                return new PlaceVerificationResult
+                {
+                    Status       = Models.OperationalStatus.Unverified,
+                    ErrorMessage = "placeId was empty."
+                };
+
+            var apiKey = !string.IsNullOrWhiteSpace(_options.PlacesApiKey) ? _options.PlacesApiKey : _options.ApiKey;
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return new PlaceVerificationResult
+                {
+                    Status       = Models.OperationalStatus.Unverified,
+                    ErrorMessage = "No Google Places API key configured."
+                };
+
+            try
+            {
+                // Request only the business_status field to minimise API quota usage.
+                var url = "https://maps.googleapis.com/maps/api/place/details/json" +
+                          $"?place_id={Uri.EscapeDataString(placeId)}" +
+                          "&fields=business_status" +
+                          $"&key={apiKey}";
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                var response = await _httpClient.GetAsync(url, cts.Token);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning(
+                        "[GooglePlacesService] VerifyPlaceStatus returned HTTP {Status} for {PlaceId}.",
+                        response.StatusCode, placeId);
+                    return new PlaceVerificationResult
+                    {
+                        Status       = Models.OperationalStatus.Unverified,
+                        ErrorMessage = $"HTTP {(int)response.StatusCode}"
+                    };
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // Top-level status check: Google returns "ZERO_RESULTS" or "NOT_FOUND" for invalid IDs.
+                if (root.TryGetProperty("status", out var topStatus))
+                {
+                    var googleStatus = topStatus.GetString();
+                    if (googleStatus is "ZERO_RESULTS" or "NOT_FOUND" or "INVALID_REQUEST")
+                    {
+                        _logger.LogWarning(
+                            "[GooglePlacesService] VerifyPlaceStatus API status={GStatus} for {PlaceId}.",
+                            googleStatus, placeId);
+                        return new PlaceVerificationResult
+                        {
+                            Status          = Models.OperationalStatus.Unverified,
+                            RawBusinessStatus = googleStatus,
+                            ErrorMessage    = $"API returned {googleStatus}"
+                        };
+                    }
+                }
+
+                string? businessStatus = null;
+                if (root.TryGetProperty("result", out var result) &&
+                    result.TryGetProperty("business_status", out var bsEl))
+                {
+                    businessStatus = bsEl.GetString();
+                }
+
+                var mappedStatus = MapBusinessStatus(businessStatus);
+
+                _logger.LogInformation(
+                    "[GooglePlacesService] VerifyPlaceStatus: {PlaceId} → {BusinessStatus} → {MappedStatus}.",
+                    placeId, businessStatus ?? "null", mappedStatus);
+
+                return new PlaceVerificationResult
+                {
+                    Status            = mappedStatus,
+                    RawBusinessStatus = businessStatus,
+                    IsLive            = true
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("[GooglePlacesService] VerifyPlaceStatus timed out for {PlaceId}.", placeId);
+                return new PlaceVerificationResult
+                {
+                    Status       = Models.OperationalStatus.Unverified,
+                    ErrorMessage = "API request timed out."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[GooglePlacesService] VerifyPlaceStatus unexpected error for {PlaceId}.", placeId);
+                return new PlaceVerificationResult
+                {
+                    Status       = Models.OperationalStatus.Unverified,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// Maps a Google Places API <c>business_status</c> string to our <see cref="Models.OperationalStatus"/> enum.
+        /// </summary>
+        private static Models.OperationalStatus MapBusinessStatus(string? businessStatus) =>
+            businessStatus switch
+            {
+                "OPERATIONAL"         => Models.OperationalStatus.Active,
+                "CLOSED_PERMANENTLY"  => Models.OperationalStatus.PermanentlyClosed,
+                "CLOSED_TEMPORARILY"  => Models.OperationalStatus.TemporarilyClosed,
+                _                     => Models.OperationalStatus.Unverified
+            };
+
         // ─── SearchNearbyBarbershopsAsync ──────────────────────────────────────────
 
         /// <inheritdoc />
         public async Task<IEnumerable<Models.ViewModels.BarberShopPlaceViewModel>> SearchNearbyBarbershopsAsync(
             double lat, double lng, int radiusMeters)
         {
-            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            var apiKey = !string.IsNullOrWhiteSpace(_options.PlacesApiKey) ? _options.PlacesApiKey : _options.ApiKey;
             if (string.IsNullOrWhiteSpace(apiKey))
             {
                 _logger.LogInformation("[GooglePlacesService] No API key configured. SearchNearby returning empty list.");
@@ -540,7 +658,7 @@ namespace WebApplication1.Services
             // Clamp radius to the API maximum
             radiusInMeters = Math.Clamp(radiusInMeters, 100, 50_000);
 
-            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            var apiKey = !string.IsNullOrWhiteSpace(_options.PlacesApiKey) ? _options.PlacesApiKey : _options.ApiKey;
             if (string.IsNullOrWhiteSpace(apiKey))
             {
                 _logger.LogInformation("[GooglePlacesService] FetchLiveBarbershopsAsync: No API key. Returning empty list.");

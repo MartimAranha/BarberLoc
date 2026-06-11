@@ -26,6 +26,7 @@ namespace WebApplication1.Models.ViewModels
         public double Longitude { get; set; }
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
+        public string? OpeningHours { get; set; }
         public string? ImageUrl { get; set; }
         public string? Website { get; set; }
         public double AverageRating { get; set; }
@@ -61,6 +62,14 @@ namespace WebApplication1.Models.ViewModels
 
         /// <summary>True when the current authenticated user has favourited this place.</summary>
         public bool IsFavourited { get; set; }
+
+        /// <summary>Google API Key to pass securely to the client script tag.</summary>
+        public string GoogleApiKey { get; set; } = string.Empty;
+
+        // ── Local DB Relations ───────────────────────────────────────────────────
+        
+        public List<Service> Services { get; set; } = new();
+        public List<Review> LocalReviews { get; set; } = new();
     }
 
     /// <summary>Photo reference DTO — proxy URL is resolved server-side.</summary>

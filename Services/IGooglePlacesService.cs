@@ -50,6 +50,17 @@ namespace WebApplication1.Services
         /// <param name="radiusInMeters">Search radius in metres (clamped to 50 000).</param>
         /// <returns>A deduplicated, merged <see cref="IReadOnlyList{BarberShopPlaceViewModel}"/>.</returns>
         Task<IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel>> FetchLiveBarbershopsAsync(double lat, double lng, int radiusInMeters);
+
+        /// <summary>
+        /// Calls the Google Places Details API for the given <paramref name="placeId"/> and reads
+        /// the <c>business_status</c> field to determine whether the establishment is still operational.
+        /// Maps Google's status string to our internal <see cref="Models.OperationalStatus"/> enum.
+        /// Returns <see cref="PlaceVerificationResult"/> with <c>Status = Unverified</c> when the
+        /// API key is absent, the call fails, or the placeId is empty.
+        /// </summary>
+        /// <param name="placeId">Google Places ID to verify.</param>
+        /// <returns>A <see cref="PlaceVerificationResult"/> describing the current operational status.</returns>
+        Task<PlaceVerificationResult> VerifyPlaceStatusAsync(string placeId);
     }
 
     /// <summary>
@@ -70,5 +81,23 @@ namespace WebApplication1.Services
 
         /// <summary>True when the live API was unavailable and mock data was returned.</summary>
         public bool IsMockData { get; set; }
+    }
+
+    /// <summary>
+    /// Result of a <see cref="IGooglePlacesService.VerifyPlaceStatusAsync"/> call.
+    /// </summary>
+    public class PlaceVerificationResult
+    {
+        /// <summary>Our internal mapped status.</summary>
+        public Models.OperationalStatus Status { get; set; } = Models.OperationalStatus.Unverified;
+
+        /// <summary>Raw <c>business_status</c> string from Google (e.g. "OPERATIONAL").</summary>
+        public string? RawBusinessStatus { get; set; }
+
+        /// <summary>True when the result came from a live API call (false = fallback/error).</summary>
+        public bool IsLive { get; set; }
+
+        /// <summary>Human-readable error message when <see cref="IsLive"/> is false.</summary>
+        public string? ErrorMessage { get; set; }
     }
 }

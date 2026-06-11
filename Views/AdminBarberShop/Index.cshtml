@@ -1,0 +1,166 @@
+@model IEnumerable<WebApplication1.Models.ViewModels.BarberShopVerificationViewModel>
+@using WebApplication1.Models
+
+@{
+    ViewData["Title"] = "Gestão de Barbearias (Google Places)";
+}
+
+<div class="container mt-5 pt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-shield-check me-2"></i> Gestão e Verificação (Google Places)</h2>
+        <form asp-action="VerifyAll" method="post" class="d-inline">
+            <button type="submit" class="btn btn-primary rounded-pill shadow-sm" title="Verificar até 20 espaços mais desatualizados">
+                <i class="bi bi-arrow-repeat me-1"></i> Verificar Lote (Max 20)
+            </button>
+        </form>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle me-1"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["SyncSummary"] != null)
+    {
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            <i class="bi bi-info-circle me-1"></i> @TempData["SyncSummary"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Nome</th>
+                            <th>Categoria</th>
+                            <th>Estado Google</th>
+                            <th>Visibilidade</th>
+                            <th>Última Verificação</th>
+                            <th class="text-end pe-4">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold">@item.Name</div>
+                                    <div class="text-muted small text-truncate" style="max-width: 250px;">@item.Address</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary text-light">@item.Category</span>
+                                </td>
+                                <td>
+                                    @switch (item.OperationalStatus)
+                                    {
+                                        case OperationalStatus.Active:
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Activo</span>
+                                            break;
+                                        case OperationalStatus.PermanentlyClosed:
+                                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> Fechado Permanentemente</span>
+                                            break;
+                                        case OperationalStatus.TemporarilyClosed:
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i> Fechado Temporariamente</span>
+                                            break;
+                                        case OperationalStatus.Unverified:
+                                        default:
+                                            <span class="badge bg-secondary"><i class="bi bi-question-circle me-1"></i> Não Verificado</span>
+                                            break;
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle"><i class="bi bi-eye"></i> Visível</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-eye-slash"></i> Oculto</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.LastVerifiedAt.HasValue)
+                                    {
+                                        <span class="small" title="@item.LastVerifiedAt.Value.ToLocalTime()">
+                                            @item.LastVerifiedAt.Value.ToLocalTime().ToString("g")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Nunca</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="btn-group" role="group">
+                                        <form asp-action="Verify" asp-route-id="@item.Id" method="post" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" title="Sincronizar com Google Places">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editStatusModal-@item.Id" title="Editar Manualmente">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Edit Status Modal -->
+                                    <div class="modal fade text-start" id="editStatusModal-@item.Id" tabindex="-1" aria-labelledby="editStatusModalLabel-@item.Id" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <form asp-action="SetStatus" method="post">
+                                                    <input type="hidden" name="id" value="@item.Id" />
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="editStatusModalLabel-@item.Id">Editar: @item.Name</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Estado Operacional (Google)</label>
+                                                            <select name="status" class="form-select">
+                                                                <option value="@OperationalStatus.Active" selected="@(item.OperationalStatus == OperationalStatus.Active)">Activo</option>
+                                                                <option value="@OperationalStatus.PermanentlyClosed" selected="@(item.OperationalStatus == OperationalStatus.PermanentlyClosed)">Fechado Permanentemente</option>
+                                                                <option value="@OperationalStatus.TemporarilyClosed" selected="@(item.OperationalStatus == OperationalStatus.TemporarilyClosed)">Fechado Temporariamente</option>
+                                                                <option value="@OperationalStatus.Unverified" selected="@(item.OperationalStatus == OperationalStatus.Unverified)">Não Verificado</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <div class="form-check form-switch">
+                                                                <input class="form-check-input" type="checkbox" name="isActive" value="true" id="isActive-@item.Id" checked="@item.IsActive">
+                                                                <label class="form-check-label" for="isActive-@item.Id">Visível na Plataforma</label>
+                                                                <input type="hidden" name="isActive" value="false" />
+                                                            </div>
+                                                            <div class="form-text">Se desmarcar, a barbearia não aparecerá na lista nem nos mapas para os clientes.</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                        <button type="submit" class="btn btn-primary">Guardar Alterações</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                    Nenhuma barbearia encontrada.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using WebApplication1.Data;
 using WebApplication1.Models;
+using WebApplication1.Models.ViewModels;
 using WebApplication1.Services;
 
 namespace WebApplication1.Controllers
@@ -12,18 +14,18 @@ namespace WebApplication1.Controllers
     public class BarbershopsController : Controller
     {
         private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _config;
+        private readonly GoogleMapsOptions _options;
         private readonly IMemoryCache _cache;
         private readonly IGooglePlacesService _googlePlaces;
 
         public BarbershopsController(
             ApplicationDbContext context,
-            IConfiguration config,
+            IOptions<GoogleMapsOptions> options,
             IMemoryCache cache,
             IGooglePlacesService googlePlaces)
         {
             _context = context;
-            _config = config;
+            _options = options.Value;
             _cache = cache;
             _googlePlaces = googlePlaces;
         }
@@ -32,7 +34,7 @@ namespace WebApplication1.Controllers
         public IActionResult Index()
         {
             var testKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY_TEST");
-            ViewData["GoogleApiKey"] = !string.IsNullOrWhiteSpace(testKey) ? testKey : (_config["Google:ApiKey"] ?? string.Empty);
+            ViewData["GoogleApiKey"] = !string.IsNullOrWhiteSpace(testKey) ? testKey : _options.ApiKey;
             return View();
         }
 
@@ -49,14 +51,62 @@ namespace WebApplication1.Controllers
 
             if (barbershop == null) return NotFound();
 
-            return View(barbershop);
+            // Fetch live Google data
+            var googleData = await _googlePlaces.GetFullPlaceDetailsAsync(barbershop.GooglePlaceId);
+
+            var testKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY_TEST");
+            var apiKey = !string.IsNullOrWhiteSpace(testKey) ? testKey : _options.ApiKey;
+
+            var viewModel = new BarbershopDetailsViewModel
+            {
+                Id = barbershop.Id,
+                GooglePlaceId = barbershop.GooglePlaceId,
+                Name = barbershop.Name,
+                Description = barbershop.Description,
+                Address = barbershop.Address,
+                Latitude = barbershop.Latitude,
+                Longitude = barbershop.Longitude,
+                PhoneNumber = barbershop.PhoneNumber,
+                Email = barbershop.Email,
+                ImageUrl = barbershop.ImageUrl,
+                OpeningHours = barbershop.OpeningHours,
+                AverageRating = barbershop.AverageRating,
+                Category = barbershop.Category,
+                Services = barbershop.Services?.ToList() ?? new List<Service>(),
+                LocalReviews = barbershop.Reviews?.ToList() ?? new List<Review>(),
+                GoogleApiKey = apiKey,
+
+                GoogleRating = googleData?.Rating,
+                UserRatingsTotal = googleData?.UserRatingsTotal,
+                GoogleMapsUrl = googleData?.GoogleMapsUrl,
+                IsOpenNow = googleData?.OpeningHours?.IsOpenNow,
+                WeekdayText = googleData?.OpeningHours?.WeekdayText ?? new List<string>(),
+                IsMockData = googleData?.IsMockData ?? false,
+                Photos = googleData?.Photos?.Select((p, i) => new PlacePhotoViewModel
+                {
+                    Index = i,
+                    ProxyUrl = $"/Barbershops/PlacePhoto?ref={Uri.EscapeDataString(p.PhotoReference)}&maxWidth=800",
+                    Width = p.Width,
+                    Height = p.Height
+                }).ToList() ?? new List<PlacePhotoViewModel>(),
+                Reviews = googleData?.Reviews?.Select(r => new PlaceReviewViewModel
+                {
+                    AuthorName = r.AuthorName,
+                    ProfilePhotoUrl = r.ProfilePhotoUrl,
+                    Rating = r.Rating,
+                    RelativeTimeDescription = r.RelativeTimeDescription,
+                    Text = r.Text
+                }).ToList() ?? new List<PlaceReviewViewModel>()
+            };
+
+            return View(viewModel);
         }
 
         // GET: /Barbershops/Map
         public async Task<IActionResult> Map()
         {
             var testKey = Environment.GetEnvironmentVariable("GOOGLE_API_KEY_TEST");
-            ViewData["GoogleApiKey"] = !string.IsNullOrWhiteSpace(testKey) ? testKey : (_config["Google:ApiKey"] ?? string.Empty);
+            ViewData["GoogleApiKey"] = !string.IsNullOrWhiteSpace(testKey) ? testKey : _options.ApiKey;
             return View();
         }
 
@@ -276,7 +326,7 @@ namespace WebApplication1.Controllers
             if (string.IsNullOrWhiteSpace(@ref))
                 return BadRequest();
 
-            var apiKey = _config["Google:PlacesApiKey"] ?? _config["Google:ApiKey"];
+            var apiKey = !string.IsNullOrWhiteSpace(_options.PlacesApiKey) ? _options.PlacesApiKey : _options.ApiKey;
             if (string.IsNullOrWhiteSpace(apiKey))
                 return NotFound();
 
