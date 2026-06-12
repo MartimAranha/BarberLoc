@@ -30,8 +30,6 @@ namespace WebApplication1.Models.GooglePlaces
         /// <summary>Longitude of the place.</summary>
         public double? Lng { get; set; }
 
-        /// <summary>True when served from mock/demo data (no live API available).</summary>
-        public bool IsMockData { get; set; }
     }
 
     /// <summary>

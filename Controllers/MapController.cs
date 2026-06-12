@@ -399,7 +399,6 @@ namespace WebApplication1.Controllers
                 WeekdayText       = googleData?.OpeningHours?.WeekdayText ?? new List<string>(),
                 Photos            = photos,
                 Reviews           = reviews,
-                IsMockData        = googleData?.IsMockData ?? false,
                 IsFavourited      = isFavourited
             };
 
@@ -408,7 +407,6 @@ namespace WebApplication1.Controllers
                 success              = true,
                 id                   = viewModel.Id,
                 googlePlaceId        = viewModel.GooglePlaceId,
-                isMock               = viewModel.IsMockData,
                 isDemoMode           = false,
                 name                 = viewModel.Name,
                 description          = viewModel.Description,
@@ -458,7 +456,6 @@ namespace WebApplication1.Controllers
                 return Json(new
                 {
                     success              = true,
-                    isMock               = result.IsMockData,
                     isDemoMode           = false,
                     placeId              = result.PlaceId,
                     name                 = result.Name,

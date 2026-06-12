@@ -138,7 +138,6 @@ namespace WebApplication1.Controllers
                     vm.GoogleUserRatingsTotal = googleData.UserRatingsTotal;
                     vm.GoogleMapsUrl = googleData.GoogleMapsUrl;
                     vm.GoogleReviews = googleData.Reviews;
-                    vm.IsGoogleDataMock = googleData.IsMockData;
                 }
             }
 

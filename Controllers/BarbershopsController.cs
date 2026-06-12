@@ -81,7 +81,6 @@ namespace WebApplication1.Controllers
                 GoogleMapsUrl = googleData?.GoogleMapsUrl,
                 IsOpenNow = googleData?.OpeningHours?.IsOpenNow,
                 WeekdayText = googleData?.OpeningHours?.WeekdayText ?? new List<string>(),
-                IsMockData = googleData?.IsMockData ?? false,
                 Photos = googleData?.Photos?.Select((p, i) => new PlacePhotoViewModel
                 {
                     Index = i,
@@ -243,7 +242,6 @@ namespace WebApplication1.Controllers
             return Json(new
             {
                 success = true,
-                isMock = result.IsMockData,
                 rating = result.Rating,
                 userRatingsTotal = result.UserRatingsTotal,
                 googleMapsUrl = result.GoogleMapsUrl,
@@ -293,7 +291,6 @@ namespace WebApplication1.Controllers
             return Json(new
             {
                 success = true,
-                isMock = result.IsMockData,
                 placeId = result.PlaceId,
                 name = result.Name,
                 formattedAddress = result.FormattedAddress,

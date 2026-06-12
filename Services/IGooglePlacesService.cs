@@ -79,8 +79,6 @@ namespace WebApplication1.Services
         /// <summary>True when data was served from in-process memory cache.</summary>
         public bool FromMemoryCache { get; set; }
 
-        /// <summary>True when the live API was unavailable and mock data was returned.</summary>
-        public bool IsMockData { get; set; }
     }
 
     /// <summary>

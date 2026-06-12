@@ -57,8 +57,6 @@ namespace WebApplication1.Models.ViewModels
 
         // ── Meta ─────────────────────────────────────────────────────────────────
 
-        /// <summary>True when Google Places data was served from mock/demo data.</summary>
-        public bool IsMockData { get; set; }
 
         /// <summary>True when the current authenticated user has favourited this place.</summary>
         public bool IsFavourited { get; set; }

@@ -108,10 +108,8 @@ namespace WebApplication1.Services
                 }
             }
 
-            // ── Layer 4: Mock / demo data ──────────────────────────────────────
-            var mockResult = BuildMockResult(placeId);
-            _memoryCache.Set(cacheKey, mockResult, MemoryCacheTtl);
-            return mockResult;
+            // Live Google Places API failure/no data fallback
+            return null;
         }
 
         // ─── GetFullPlaceDetailsAsync (new — full panel data) ─────────────────────
@@ -174,10 +172,8 @@ namespace WebApplication1.Services
                 }
             }
 
-            // Fallback: rich mock data
-            var mock = BuildFullMockResult(placeId);
-            _memoryCache.Set(cacheKey, mock, FullDetailsCacheTtl);
-            return mock;
+            // Fallback: no mock data permitted. Return null on failure.
+            return null;
         }
 
         // ─── Private Helpers — GetPlaceDetailsAsync ───────────────────────────────
@@ -279,45 +275,7 @@ namespace WebApplication1.Services
             }
         }
 
-        private static GooglePlacesResult BuildMockResult(string placeId)
-        {
-            var seed = placeId.GetHashCode();
-            var rng = new Random(Math.Abs(seed));
 
-            var names = new[] { "João M.", "Ana S.", "Ricardo P.", "Marta C.", "Carlos F.", "Sofia L." };
-            var comments = new[]
-            {
-                "Excelente atendimento, muito profissional! Recomendo vivamente.",
-                "Ótimo serviço, fiquei muito satisfeito com o resultado. Voltarei certamente.",
-                "Bom corte, preços justos e ambiente agradável.",
-                "Profissionais competentes e simpáticos. O melhor da área!",
-                "Serviço rápido e de qualidade. Fica mesmo perto de casa.",
-                "Muito bom! Atendimento de excelência e o espaço está impecável."
-            };
-            var times = new[] { "há 2 dias", "há 1 semana", "há 2 semanas", "há 1 mês", "há 3 meses", "há 6 meses" };
-
-            var count = rng.Next(3, 6);
-            var reviews = new List<GoogleReviewItem>();
-            for (int i = 0; i < count; i++)
-            {
-                reviews.Add(new GoogleReviewItem
-                {
-                    AuthorName = names[rng.Next(names.Length)],
-                    Rating = rng.Next(4, 6),
-                    Text = comments[rng.Next(comments.Length)],
-                    RelativeTimeDescription = times[i % times.Length]
-                });
-            }
-
-            return new GooglePlacesResult
-            {
-                Rating = Math.Round(3.8 + rng.NextDouble() * 1.2, 1),
-                UserRatingsTotal = rng.Next(12, 300),
-                GoogleMapsUrl = $"https://maps.google.com/?q={Uri.EscapeDataString(placeId)}",
-                Reviews = reviews,
-                IsMockData = true
-            };
-        }
 
         // ─── Private Helpers — GetFullPlaceDetailsAsync ───────────────────────────
 
@@ -417,71 +375,7 @@ namespace WebApplication1.Services
             }
         }
 
-        private static PlaceDetailsResult BuildFullMockResult(string placeId)
-        {
-            var seed = Math.Abs(placeId.GetHashCode());
-            var rng = new Random(seed);
 
-            var names = new[] { "Barbearia Central", "Salão Elegante", "UrbanCuts Studio", "Barbershop Deluxe", "Corte & Arte" };
-            var addresses = new[] { "Rua Augusta 120, Lisboa", "Av. da Liberdade 55, Lisboa", "Rua do Carmo 8, Lisboa", "Praça do Comércio 2, Lisboa" };
-            var phones = new[] { "+351 21 000 1111", "+351 21 000 2222", "+351 21 000 3333" };
-            var websites = new[] { "https://www.barbershop.pt", "https://www.salaobarbeiro.pt", null };
-            var reviewers = new[] { "João M.", "Ana S.", "Ricardo P.", "Marta C.", "Carlos F.", "Sofia L.", "Pedro A.", "Inês R." };
-            var comments = new[]
-            {
-                "Excelente atendimento! O barbeiro sabe bem o que está a fazer. Saí com um corte perfeito.",
-                "Ótimo ambiente e profissionais fantásticos. Recomendo a toda a gente.",
-                "Preços muito razoáveis para a qualidade do serviço. Voltarei com certeza!",
-                "A melhor barbearia da zona. Atendimento de cinco estrelas sem dúvida.",
-                "Fiquei muito satisfeito. Marcação fácil e pontualidade total.",
-                "Serviço impecável. O espaço é muito agradável e limpo."
-            };
-            var times = new[] { "há 3 dias", "há 1 semana", "há 2 semanas", "há 1 mês", "há 2 meses" };
-            var weekdays = new[]
-            {
-                "Segunda-feira: 09:00 – 20:00",
-                "Terça-feira: 09:00 – 20:00",
-                "Quarta-feira: 09:00 – 20:00",
-                "Quinta-feira: 09:00 – 20:00",
-                "Sexta-feira: 09:00 – 20:00",
-                "Sábado: 09:00 – 18:00",
-                "Domingo: Fechado"
-            };
-
-            var reviewCount = rng.Next(3, 6);
-            var reviews = new List<PlaceReview>();
-            for (int i = 0; i < reviewCount; i++)
-            {
-                reviews.Add(new PlaceReview
-                {
-                    AuthorName = reviewers[rng.Next(reviewers.Length)],
-                    Rating = rng.Next(4, 6),
-                    Text = comments[rng.Next(comments.Length)],
-                    RelativeTimeDescription = times[i % times.Length],
-                    ProfilePhotoUrl = null
-                });
-            }
-
-            return new PlaceDetailsResult
-            {
-                PlaceId = placeId,
-                Name = names[seed % names.Length],
-                FormattedAddress = addresses[seed % addresses.Length],
-                FormattedPhoneNumber = phones[seed % phones.Length],
-                Website = websites[seed % websites.Length],
-                Rating = Math.Round(3.8 + rng.NextDouble() * 1.2, 1),
-                UserRatingsTotal = rng.Next(20, 350),
-                GoogleMapsUrl = $"https://maps.google.com/?q={Uri.EscapeDataString(placeId)}",
-                OpeningHours = new PlaceOpeningHours
-                {
-                    IsOpenNow = rng.Next(2) == 0,
-                    WeekdayText = weekdays.ToList()
-                },
-                Photos = new List<PlacePhoto>(), // No mock photos — panel handles empty gracefully
-                Reviews = reviews,
-                IsMockData = true
-            };
-        }
 
         // ─── VerifyPlaceStatusAsync ────────────────────────────────────────────────
 
