@@ -112,13 +112,10 @@ namespace WebApplication1.Data
                 .Property(b => b.UpdatedAt)
                 .HasColumnType("datetime2");
 
-            // OperationalStatus: stored as int for migration stability.
-            // Default 0 = Active — ensures existing rows without the column are treated as open.
+            // OperationalStatus: default "Active" ensures existing rows without the column are treated as open.
             builder.Entity<Barbershop>()
                 .Property(b => b.OperationalStatus)
-                .HasConversion<int>()
-                .HasDefaultValue(OperationalStatus.Active)
-                .HasColumnType("int");
+                .HasDefaultValue(OperationalStatus.Active);
 
             // LastVerifiedAt: nullable datetime2 — null means never verified via the Places API.
             builder.Entity<Barbershop>()

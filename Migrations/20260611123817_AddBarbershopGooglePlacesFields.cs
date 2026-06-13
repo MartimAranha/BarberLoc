@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -31,6 +31,9 @@ namespace WebApplication1.Migrations
                 type: "datetime2",
                 nullable: false,
                 defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+
+            // Assign unique GooglePlaceIds to existing rows to prevent unique constraint violation
+            migrationBuilder.Sql("UPDATE [Barbershops] SET [GooglePlaceId] = CAST(NEWID() AS nvarchar(100)) WHERE [GooglePlaceId] = '';");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Barbershops_GooglePlaceId",

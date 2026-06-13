@@ -93,6 +93,7 @@ namespace WebApplication1.Data
                                         Rating        = place.totalScore,
                                         Category      = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
                                         OperationalStatus = OperationalStatus.Unverified,
+                                        LastVerifiedAt = DateTime.Now,
                                         IsActive      = true,
                                         CreatedAt     = DateTime.Now,
                                         UpdatedAt     = DateTime.Now
@@ -146,8 +147,10 @@ namespace WebApplication1.Data
                                         ImageUrl = null,
                                         AverageRating = p.Rating ?? 0,
                                         GooglePlaceId = p.PlaceId,
+                                        Rating        = p.Rating,
                                         Category = isSalon ? BarbershopCategory.HairSalon : BarbershopCategory.Barbershop,
-                                        OperationalStatus = OperationalStatus.Unverified,
+                                        OperationalStatus = OperationalStatus.Active,
+                                        LastVerifiedAt = DateTime.Now,
                                         IsActive = true,
                                         CreatedAt = DateTime.Now,
                                         UpdatedAt = DateTime.Now
