@@ -1,0 +1,301 @@
+@{
+    ViewData["Title"] = "Pesquisar Barbearias";
+}
+
+<style>
+    #map {
+        height: 100vh;
+        min-height: 500px;
+        width: 100%;
+        border-radius: 0;
+    }
+    .results-container {
+        height: 100vh;
+        overflow-y: auto;
+    }
+    .place-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border-radius: 0.75rem;
+    }
+    .place-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+        cursor: pointer;
+    }
+    /* Hide scrollbar for aesthetics */
+    .results-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    .results-container::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+        border-radius: 3px;
+    }
+</style>
+
+<div class="container-fluid p-0">
+    <div class="row g-0">
+        <!-- Sidebar for results -->
+        <div class="col-md-4 col-lg-3 results-container bg-light border-end shadow-sm z-1 position-relative">
+            <div class="p-4 border-bottom bg-white sticky-top shadow-sm z-2">
+                <h4 class="mb-3 fw-bold text-dark">Barbearias e Salões</h4>
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Procurar local (ex: Lisboa)...">
+                </div>
+                <div class="d-flex align-items-center justify-content-between">
+                    <button class="btn btn-outline-primary btn-sm rounded-pill fw-medium" id="locateBtn">
+                        <i class="bi bi-geo-alt-fill me-1"></i> Perto de mim
+                    </button>
+                    <span id="resultsCount" class="badge bg-secondary rounded-pill">0 resultados</span>
+                </div>
+            </div>
+            
+            <div id="resultsList" class="p-3">
+                <div class="text-center text-muted my-5">
+                    <div class="spinner-border text-primary mb-3 d-none" id="loadingSpinner" role="status">
+                        <span class="visually-hidden">A carregar...</span>
+                    </div>
+                    <p id="emptyStateMsg">Mova o mapa para pesquisar barbearias.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="col-md-8 col-lg-9 position-relative">
+            <div id="map"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- If Bootstrap Icons are missing in _Layout, we add them here for this view just in case -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=@ViewBag.GoogleMapsApiKey&libraries=places&callback=initMap" async defer></script>
+    <script>
+        let map;
+        let markers = [];
+        let infoWindow;
+        let searchBox;
+        
+        // Default to Lisbon
+        const defaultLocation = { lat: 38.7169, lng: -9.1399 };
+
+        window.initMap = function() {
+            console.log("Map initialized successfully.");
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: defaultLocation,
+                zoom: 14,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+                styles: [
+                    {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            });
+
+            infoWindow = new google.maps.InfoWindow();
+
+            // Set up SearchBox
+            const input = document.getElementById("searchInput");
+            searchBox = new google.maps.places.SearchBox(input);
+
+            // Bias the SearchBox results towards current map's viewport.
+            map.addListener("bounds_changed", () => {
+                searchBox.setBounds(map.getBounds());
+            });
+
+            // Listen for the event fired when the user selects a prediction
+            searchBox.addListener("places_changed", () => {
+                const places = searchBox.getPlaces();
+                if (places.length == 0) return;
+
+                const bounds = new google.maps.LatLngBounds();
+                places.forEach((place) => {
+                    if (!place.geometry || !place.geometry.location) return;
+                    if (place.geometry.viewport) {
+                        bounds.union(place.geometry.viewport);
+                    } else {
+                        bounds.extend(place.geometry.location);
+                    }
+                });
+                map.fitBounds(bounds);
+            });
+
+            // Refresh live results when the map stops moving
+            map.addListener("idle", fetchLiveResults);
+
+            // Locate button
+            document.getElementById("locateBtn").addEventListener("click", () => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const pos = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude,
+                            };
+                            map.setCenter(pos);
+                            map.setZoom(15);
+                        },
+                        () => {
+                            alert("Não foi possível obter a sua localização.");
+                        }
+                    );
+                } else {
+                    alert("Geolocalização não suportada pelo seu browser.");
+                }
+            });
+            
+            // Try to geolocate on load
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    map.setCenter({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    });
+                });
+            }
+        }
+
+        async function fetchLiveResults() {
+            const center = map.getCenter();
+            // Estimate radius based on zoom level (rough approximation)
+            const zoom = map.getZoom();
+            const radius = Math.floor(40000 / Math.pow(2, zoom - 10)); // e.g., zoom 14 -> ~2500m
+
+            const loadingSpinner = document.getElementById("loadingSpinner");
+            const emptyStateMsg = document.getElementById("emptyStateMsg");
+
+            if (loadingSpinner != null) loadingSpinner.classList.remove("d-none");
+            if (emptyStateMsg != null) emptyStateMsg.classList.add("d-none");
+
+            try {
+                const response = await fetch(`/Search/GetLiveResults?lat=${center.lat()}&lng=${center.lng()}&radius=${radius}`);
+                if (!response.ok) throw new Error("Erro na API");
+                const data = await response.json();
+                console.log("Raw places data received from API:", data);
+                
+                renderResults(data);
+            } catch (error) {
+                console.error("Failed to fetch live results:", error);
+                if (emptyStateMsg != null) {
+                    emptyStateMsg.textContent = "Erro ao carregar resultados.";
+                    emptyStateMsg.classList.remove("d-none");
+                }
+            } finally {
+                if (loadingSpinner != null) loadingSpinner.classList.add("d-none");
+            }
+        }
+
+        function renderResults(places) {
+            // Clear existing markers
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+
+            const listContainer = document.getElementById("resultsList");
+            if (listContainer != null) listContainer.innerHTML = "";
+
+            const resultsCount = document.getElementById("resultsCount");
+            if (resultsCount != null) resultsCount.textContent = `${places.length} resultados`;
+
+            const emptyStateMsg = document.getElementById("emptyStateMsg");
+
+            if (places.length === 0) {
+                if (emptyStateMsg != null) {
+                    emptyStateMsg.textContent = "Não foram encontradas barbearias nesta zona.";
+                    emptyStateMsg.classList.remove("d-none");
+                }
+                return;
+            }
+
+            places.forEach((place, index) => {
+                // Add marker
+                console.log(`Plotting marker for ${place.name} at Coordinates:`, place.latitude, place.longitude);
+                const position = { lat: place.latitude, lng: place.longitude };
+                const marker = new google.maps.Marker({
+                    position: position,
+                    map: map,
+                    title: place.name,
+                    animation: google.maps.Animation.DROP
+                });
+
+                markers.push(marker);
+
+                // Add list item
+                const stars = getStars(place.rating || 0);
+                const reviewsText = place.userRatingsTotal ? `(${place.userRatingsTotal} avaliações)` : "Novo";
+                const categoryBadge = place.category === 'Barbearia' ? 'bg-dark' : (place.category === 'Cabeleireiro' ? 'bg-info' : 'bg-secondary text-dark');
+
+                const cardHtml = `
+                    <div class="card border-0 shadow-sm mb-3 place-card" id="card-${index}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title fw-bold mb-0 text-truncate me-2" title="${place.name}">${place.name}</h5>
+                                <span class="badge ${categoryBadge}">${place.category}</span>
+                            </div>
+                            <div class="mb-2 text-warning small fw-medium">
+                                ${place.rating ? `<strong>${place.rating.toFixed(1)}</strong> ${stars}` : '<span class="text-muted">Sem avaliações</span>'}
+                                <span class="text-muted ms-1">${reviewsText}</span>
+                            </div>
+                            <p class="card-text text-muted small mb-3 text-truncate" title="${place.address || ''}">
+                                <i class="bi bi-geo-alt me-1"></i> ${place.address || 'Endereço indisponível'}
+                            </p>
+                            <a href="https://www.google.com/maps/place/?q=place_id:${place.placeId}" target="_blank" class="btn btn-outline-dark btn-sm w-100 fw-medium rounded-pill">
+                                <i class="bi bi-map me-1"></i> Ver no Google Maps
+                            </a>
+                        </div>
+                    </div>
+                `;
+                
+                listContainer.insertAdjacentHTML('beforeend', cardHtml);
+
+                // Interaction: highlight marker on hover/click
+                const cardEl = document.getElementById(`card-${index}`);
+                
+                cardEl.addEventListener("mouseenter", () => {
+                    marker.setAnimation(google.maps.Animation.BOUNCE);
+                    setTimeout(() => marker.setAnimation(null), 750);
+                });
+
+                cardEl.addEventListener("click", () => {
+                    map.panTo(position);
+                    map.setZoom(17);
+                    showInfoWindow(marker, place);
+                });
+
+                marker.addListener("click", () => {
+                    showInfoWindow(marker, place);
+                    cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+            });
+        }
+
+        function showInfoWindow(marker, place) {
+            const content = `
+                <div class="p-2" style="max-width: 220px;">
+                    <h6 class="fw-bold mb-1">${place.name}</h6>
+                    <p class="text-muted small mb-2 text-truncate">${place.address}</p>
+                    <a href="https://www.google.com/maps/place/?q=place_id:${place.placeId}" target="_blank" class="btn btn-primary btn-sm w-100 rounded-pill fw-medium">Abrir</a>
+                </div>
+            `;
+            infoWindow.setContent(content);
+            infoWindow.open(map, marker);
+        }
+
+        function getStars(rating) {
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                if (rating >= i) starsHtml += '<i class="bi bi-star-fill"></i>';
+                else if (rating >= i - 0.5) starsHtml += '<i class="bi bi-star-half"></i>';
+                else starsHtml += '<i class="bi bi-star"></i>';
+            }
+            return starsHtml;
+        }
+
+        // Map is now initialized via the callback parameter in the script tag
+    </script>
+}

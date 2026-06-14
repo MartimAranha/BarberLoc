@@ -10,6 +10,7 @@ namespace WebApplication1.Models.GooglePlaces
         public string Name { get; set; } = string.Empty;
         public string? FormattedAddress { get; set; }
         public string? FormattedPhoneNumber { get; set; }
+        public string? InternationalPhoneNumber { get; set; }
         public string? Website { get; set; }
         public double? Rating { get; set; }
         public int? UserRatingsTotal { get; set; }

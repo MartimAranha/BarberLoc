@@ -24,12 +24,7 @@ namespace WebApplication1.Models.ViewModels
         public string Address { get; set; } = string.Empty;
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-        public string? PhoneNumber { get; set; }
-        public string? Email { get; set; }
-        public string? OpeningHours { get; set; }
-        public string? ImageUrl { get; set; }
         public string? Website { get; set; }
-        public double AverageRating { get; set; }
         public BarbershopCategory Category { get; set; }
 
         // ── Live Google Places Data (nullable — unavailable when API key absent) ─
@@ -42,6 +37,12 @@ namespace WebApplication1.Models.ViewModels
 
         /// <summary>Google Maps deep-link for the CTA button. Never used for auto-redirect.</summary>
         public string? GoogleMapsUrl { get; set; }
+        
+        /// <summary>Formatted phone number from Google Places.</summary>
+        public string? FormattedPhoneNumber { get; set; }
+        
+        /// <summary>International phone number from Google Places.</summary>
+        public string? InternationalPhoneNumber { get; set; }
 
         /// <summary>True if the place is currently open, according to the Places API.</summary>
         public bool? IsOpenNow { get; set; }
@@ -67,7 +68,6 @@ namespace WebApplication1.Models.ViewModels
         // ── Local DB Relations ───────────────────────────────────────────────────
         
         public List<Service> Services { get; set; } = new();
-        public List<Review> LocalReviews { get; set; } = new();
     }
 
     /// <summary>Photo reference DTO — proxy URL is resolved server-side.</summary>

@@ -37,73 +37,47 @@ namespace WebApplication1.Controllers
         /// </summary>
         public async Task<IActionResult> Index(ProviderSearchViewModel vm)
         {
-            var query = _context.Barbershops
-                .Include(b => b.Services)
-                .Where(b => b.IsActive)
-                .AsQueryable();
+            // Default search fallback using Lisbon coordinates
+            double lat = 38.7223;
+            double lng = -9.1393;
+            int radius = 15000; // 15km default radius
 
-            // ── Full-text search ───────────────────────────────────────────────
-            if (!string.IsNullOrWhiteSpace(vm.SearchQuery))
+            var searchQuery = string.IsNullOrWhiteSpace(vm.SearchQuery) ? "Barbearia" : vm.SearchQuery;
+
+            // Fetch live Google Places data
+            var liveResults = await _googlePlaces.FetchLiveBarbershopsAsync(lat, lng, radius, searchQuery);
+
+            var mappedResults = liveResults.Select(r => new Barbershop
             {
-                var q = vm.SearchQuery.Trim().ToLower();
-                query = query.Where(b =>
-                    b.Name.ToLower().Contains(q) ||
-                    (b.Description != null && b.Description.ToLower().Contains(q)) ||
-                    b.Address.ToLower().Contains(q));
-            }
-
-            // ── Category filter ────────────────────────────────────────────────
-            if (vm.SelectedCategories.Any())
-            {
-                var cats = vm.SelectedCategories
-                    .Select(c => Enum.TryParse<BarbershopCategory>(c, out var r) ? r : (BarbershopCategory?)null)
-                    .Where(c => c.HasValue)
-                    .Select(c => c!.Value)
-                    .ToList();
-
-                if (cats.Any())
-                    query = query.Where(b => cats.Contains(b.Category));
-            }
-
-            // ── Minimum rating filter ──────────────────────────────────────────
-            if (vm.MinRating.HasValue)
-                query = query.Where(b => b.AverageRating >= vm.MinRating.Value);
-
-            // ── Load results with services for further in-memory filtering ─────
-            var allResults = await query.ToListAsync();
-
-            // ── Gender filter (in-memory, requires Services navigation) ─────────
-            if (vm.SelectedGenders.Any())
-            {
-                var genders = vm.SelectedGenders
-                    .Select(g => Enum.TryParse<TargetGender>(g, out var r) ? r : (TargetGender?)null)
-                    .Where(g => g.HasValue)
-                    .Select(g => g!.Value)
-                    .ToList();
-
-                allResults = allResults
-                    .Where(b => b.Services.Any(s =>
-                        s.IsAvailable &&
-                        (genders.Contains(s.TargetGender) || s.TargetGender == TargetGender.Unisex)))
-                    .ToList();
-            }
-
-            // ── Mobile-only filter ─────────────────────────────────────────────
-            if (vm.MobileOnly)
-                allResults = allResults.Where(b => b.Services.Any(s => s.IsAvailable && s.IsMobile)).ToList();
+                Id = 0, // Map live results with no DB ID
+                GooglePlaceId = r.PlaceId,
+                Name = r.Name,
+                Address = r.Address ?? "Sem morada",
+                Latitude = r.Lat,
+                Longitude = r.Lng,
+                ImageUrl = r.PhotoUrl, // Mapped to the proxy photo URL
+                Category = InferCategory(r.Category),
+                Services = new List<Service>() // Real services would require the DB
+            }).ToList();
 
             // ── Sort ──────────────────────────────────────────────────────────
-            allResults = vm.SortBy switch
+            var allResults = vm.SortBy switch
             {
-                "name" => allResults.OrderBy(b => b.Name).ToList(),
-                "newest" => allResults.OrderByDescending(b => b.CreatedAt).ToList(),
-                _ => allResults.OrderByDescending(b => b.AverageRating).ToList() // default: rating
+                "name" => mappedResults.OrderBy(b => b.Name).ToList(),
+                _ => mappedResults.OrderBy(b => b.Name).ToList() // default: name
             };
 
             vm.Results = allResults;
             vm.TotalCount = allResults.Count;
 
             return View(vm);
+        }
+
+        private static BarbershopCategory InferCategory(string? category)
+        {
+            if (category == "HairSalon") return BarbershopCategory.HairSalon;
+            if (category == "Unisex") return BarbershopCategory.Unisex;
+            return BarbershopCategory.Barbershop;
         }
 
         // ── GET /Provider/Details/{id} ─────────────────────────────────────────
@@ -116,8 +90,6 @@ namespace WebApplication1.Controllers
         {
             var barbershop = await _context.Barbershops
                 .Include(b => b.Services)
-                .Include(b => b.Reviews)
-                    .ThenInclude(r => r.User)
                 .FirstOrDefaultAsync(b => b.Id == id && b.IsActive);
 
             if (barbershop == null)
@@ -128,10 +100,9 @@ namespace WebApplication1.Controllers
                 Barbershop = barbershop
             };
 
-            // ── Enrich with Google Places data ─────────────────────────────────
-            if (!string.IsNullOrWhiteSpace(barbershop.PlaceId))
+            if (!string.IsNullOrWhiteSpace(barbershop.GooglePlaceId))
             {
-                var googleData = await _googlePlaces.GetPlaceDetailsAsync(barbershop.PlaceId);
+                var googleData = await _googlePlaces.GetPlaceDetailsAsync(barbershop.GooglePlaceId);
                 if (googleData != null)
                 {
                     vm.GoogleRating = googleData.Rating;

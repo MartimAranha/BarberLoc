@@ -49,7 +49,7 @@ namespace WebApplication1.Services
         /// <param name="lng">Centre longitude.</param>
         /// <param name="radiusInMeters">Search radius in metres (clamped to 50 000).</param>
         /// <returns>A deduplicated, merged <see cref="IReadOnlyList{BarberShopPlaceViewModel}"/>.</returns>
-        Task<IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel>> FetchLiveBarbershopsAsync(double lat, double lng, int radiusInMeters);
+        Task<IReadOnlyList<Models.ViewModels.BarberShopPlaceViewModel>> FetchLiveBarbershopsAsync(double lat, double lng, int radiusInMeters, string? query = null);
 
         /// <summary>
         /// Calls the Google Places Details API for the given <paramref name="placeId"/> and reads

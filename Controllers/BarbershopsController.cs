@@ -45,8 +45,6 @@ namespace WebApplication1.Controllers
 
             var barbershop = await _context.Barbershops
                 .Include(b => b.Services)
-                .Include(b => b.Reviews)
-                    .ThenInclude(r => r.User)
                 .FirstOrDefaultAsync(b => b.Id == id && b.IsActive);
 
             if (barbershop == null) return NotFound();
@@ -66,19 +64,15 @@ namespace WebApplication1.Controllers
                 Address = barbershop.Address,
                 Latitude = barbershop.Latitude,
                 Longitude = barbershop.Longitude,
-                PhoneNumber = barbershop.PhoneNumber,
-                Email = barbershop.Email,
-                ImageUrl = barbershop.ImageUrl,
-                OpeningHours = barbershop.OpeningHours,
-                AverageRating = barbershop.AverageRating,
                 Category = barbershop.Category,
                 Services = barbershop.Services?.ToList() ?? new List<Service>(),
-                LocalReviews = barbershop.Reviews?.ToList() ?? new List<Review>(),
                 GoogleApiKey = apiKey,
 
                 GoogleRating = googleData?.Rating,
                 UserRatingsTotal = googleData?.UserRatingsTotal,
                 GoogleMapsUrl = googleData?.GoogleMapsUrl,
+                FormattedPhoneNumber = googleData?.FormattedPhoneNumber,
+                InternationalPhoneNumber = googleData?.InternationalPhoneNumber,
                 IsOpenNow = googleData?.OpeningHours?.IsOpenNow,
                 WeekdayText = googleData?.OpeningHours?.WeekdayText ?? new List<string>(),
                 Photos = googleData?.Photos?.Select((p, i) => new PlacePhotoViewModel
@@ -146,9 +140,9 @@ namespace WebApplication1.Controllers
                     if (dist > radiusKm.Value) continue;
                 }
 
-                // Rating filter
-                if (minRating.HasValue && b.AverageRating < minRating.Value)
-                    continue;
+                // Rating filter is no longer applicable using static data. Wait, actually we can't filter locally anymore without rating.
+                // We'll skip the local rating filter since data is dynamic.
+                // if (minRating.HasValue && b.AverageRating < minRating.Value) continue;
 
                 results.Add(new
                 {
@@ -158,15 +152,12 @@ namespace WebApplication1.Controllers
                     lng = b.Longitude,
                     address = b.Address,
                     category = b.Category.ToString(),
-                    rating = b.AverageRating,
-                    image = b.ImageUrl,
-                    phone = b.PhoneNumber,
                     hasMobile = hasMobile,
                     placeId = b.PlaceId
                 });
             }
 
-            return Json(results.OrderByDescending(r => (double)r.GetType().GetProperty("rating")!.GetValue(r)!).Take(50));
+            return Json(results.Take(50));
         }
 
         // GET: /Barbershops/GetLiveMarkers?lat=...&lng=...&radius=...
@@ -183,37 +174,7 @@ namespace WebApplication1.Controllers
 
             if (liveResults.Count == 0) return Json(new object[] {});
 
-            var incomingIds = liveResults.Select(r => r.PlaceId).ToList();
-            var existingBarbershops = await _context.Barbershops
-                .Where(b => b.GooglePlaceId != null && incomingIds.Contains(b.GooglePlaceId))
-                .Select(b => b.GooglePlaceId!)
-                .ToListAsync();
-            var existingSet = new HashSet<string>(existingBarbershops);
-            var now = DateTime.UtcNow;
-
-            foreach (var vm in liveResults)
-            {
-                if (string.IsNullOrWhiteSpace(vm.PlaceId)) continue;
-                if (!existingSet.Contains(vm.PlaceId))
-                {
-                    _context.Barbershops.Add(new Barbershop
-                    {
-                        Name          = vm.Name,
-                        Address       = vm.Address ?? string.Empty,
-                        Latitude      = vm.Lat,
-                        Longitude     = vm.Lng,
-                        PhoneNumber   = vm.PhoneNumber,
-                        AverageRating = vm.Rating ?? 0,
-                        GooglePlaceId = vm.PlaceId,
-                        PlaceId       = vm.PlaceId, // fallback
-                        Category      = BarbershopCategory.Barbershop, // Simplify for this endpoint
-                        IsActive      = true,
-                        CreatedAt     = now
-                    });
-                }
-            }
-
-            try { await _context.SaveChangesAsync(); } catch { /* ignore for live render */ }
+            // Return live results directly, database saving has been removed per user request.
 
             return Json(liveResults.Select(vm => new
             {
@@ -295,6 +256,7 @@ namespace WebApplication1.Controllers
                 name = result.Name,
                 formattedAddress = result.FormattedAddress,
                 formattedPhoneNumber = result.FormattedPhoneNumber,
+                internationalPhoneNumber = result.InternationalPhoneNumber,
                 website = result.Website,
                 rating = result.Rating,
                 userRatingsTotal = result.UserRatingsTotal,

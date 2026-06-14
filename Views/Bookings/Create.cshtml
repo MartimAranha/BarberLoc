@@ -33,12 +33,6 @@
                                     <p class="text-white opacity-75 small mb-0">
                                         <i class="fas fa-map-marker-alt me-1"></i>@barbershop.Address
                                     </p>
-                                    @if (!string.IsNullOrEmpty(barbershop.PhoneNumber))
-                                    {
-                                        <a href="tel:@barbershop.PhoneNumber" class="text-white opacity-75 small text-decoration-none">
-                                            <i class="fas fa-phone me-1"></i>@barbershop.PhoneNumber
-                                        </a>
-                                    }
                                 </div>
                             </div>
                         </div>
@@ -98,12 +92,6 @@
                                 </label>
                                 <input asp-for="BookingTime" type="time" class="form-control form-control-lg rounded-3" />
                                 <span asp-validation-for="BookingTime" class="text-danger small"></span>
-                                @if (!string.IsNullOrEmpty(barbershop?.OpeningHours))
-                                {
-                                    <small class="text-muted">
-                                        <i class="fas fa-info-circle me-1"></i>@barbershop.OpeningHours
-                                    </small>
-                                }
                             </div>
                         </div>
 

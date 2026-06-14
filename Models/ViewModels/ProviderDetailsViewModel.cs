@@ -32,7 +32,6 @@ namespace WebApplication1.Models.ViewModels
         public int BarbershopId => Barbershop.Id;
         public string BarbershopName => Barbershop.Name;
         public ICollection<Service> Services => Barbershop.Services;
-        public ICollection<Review> LocalReviews => Barbershop.Reviews;
     }
 
     /// <summary>

@@ -46,10 +46,10 @@
                     <div class="rating-chip">
                         @for (int i = 1; i <= 5; i++)
                         {
-                            <i class="@(i <= Math.Round(b.AverageRating) ? "fas" : "far") fa-star text-warning"></i>
+                            <i class="far fa-star text-warning"></i>
                         }
-                        <span class="ms-1 text-white fw-bold">@b.AverageRating.ToString("0.0")</span>
-                        <span class="text-white opacity-75 small ms-1">(@b.Reviews.Count avaliações)</span>
+                        <span class="ms-1 text-white fw-bold">0.0</span>
+                        <span class="text-white opacity-75 small ms-1">(0 avaliações)</span>
                     </div>
 
                     @* Google rating pill *@
@@ -116,44 +116,7 @@
                             </div>
                         </div>
 
-                        @if (!string.IsNullOrEmpty(b.PhoneNumber))
-                        {
-                            <div class="col-sm-6">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="info-icon"><i class="fas fa-phone"></i></div>
-                                    <div>
-                                        <div class="small text-muted fw-semibold mb-1">TELEFONE</div>
-                                        <a href="tel:@b.PhoneNumber" class="text-decoration-none">@b.PhoneNumber</a>
-                                    </div>
-                                </div>
-                            </div>
-                        }
 
-                        @if (!string.IsNullOrEmpty(b.Email))
-                        {
-                            <div class="col-sm-6">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="info-icon"><i class="fas fa-envelope"></i></div>
-                                    <div>
-                                        <div class="small text-muted fw-semibold mb-1">EMAIL</div>
-                                        <a href="mailto:@b.Email" class="text-decoration-none">@b.Email</a>
-                                    </div>
-                                </div>
-                            </div>
-                        }
-
-                        @if (!string.IsNullOrEmpty(b.OpeningHours))
-                        {
-                            <div class="col-sm-6">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="info-icon"><i class="fas fa-clock"></i></div>
-                                    <div>
-                                        <div class="small text-muted fw-semibold mb-1">HORÁRIO</div>
-                                        <div>@b.OpeningHours</div>
-                                    </div>
-                                </div>
-                            </div>
-                        }
                     </div>
                 </div>
             </div>
@@ -220,10 +183,7 @@
                        class="btn btn-white btn-lg w-100 fw-bold text-primary" id="sideBookBtn">
                         <i class="fas fa-calendar-plus me-2"></i> Fazer Reserva
                     </a>
-                    <a asp-controller="Reviews" asp-action="Create" asp-route-barbershopId="@b.Id"
-                       class="btn btn-outline-light btn-sm mt-2 w-100">
-                        <i class="fas fa-star me-1"></i> Deixar Avaliação
-                    </a>
+
                 </div>
             </div>
 
@@ -239,7 +199,7 @@
                             <button class="nav-link active" id="local-tab" data-bs-toggle="tab"
                                     data-bs-target="#localReviews" type="button" role="tab">
                                 <i class="fas fa-home me-1"></i> BarberLoc
-                                <span class="badge bg-secondary ms-1">@(b.Reviews?.Count ?? 0)</span>
+                                <span class="badge bg-secondary ms-1">0</span>
                             </button>
                         </li>
                         <li class="nav-item">
@@ -257,38 +217,10 @@
                     <div class="tab-content">
                         @* Local Reviews *@
                         <div class="tab-pane fade show active" id="localReviews" role="tabpanel">
-                            @if (b.Reviews != null && b.Reviews.Any())
-                            {
-                                @foreach (var review in b.Reviews.OrderByDescending(r => r.CreatedAt))
-                                {
-                                    <div class="review-item mb-3 pb-3 border-bottom">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <div class="fw-semibold">
-                                                <i class="fas fa-user-circle text-primary me-1"></i>
-                                                @(review.User?.FullName ?? review.User?.UserName ?? "Anónimo")
-                                            </div>
-                                            <small class="text-muted">@review.CreatedAt.ToString("dd MMM yyyy")</small>
-                                        </div>
-                                        <div class="mb-1">
-                                            @for (int i = 1; i <= 5; i++)
-                                            {
-                                                <i class="@(i <= review.Rating ? "fas" : "far") fa-star text-warning small"></i>
-                                            }
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(review.Comment))
-                                        {
-                                            <p class="mb-0 text-secondary small">@review.Comment</p>
-                                        }
-                                    </div>
-                                }
-                            }
-                            else
-                            {
                                 <div class="text-center py-4 text-muted">
                                     <i class="fas fa-comment-slash fa-2x mb-3 opacity-50"></i>
                                     <p class="mb-0">Ainda não há avaliações. Seja o primeiro!</p>
                                 </div>
-                            }
                         </div>
 
                         @* Google Reviews *@

@@ -243,8 +243,7 @@
 
                             @* Rating chip *@
                             <div class="provider-card__rating">
-                                <i class="fas fa-star text-warning me-1"></i>
-                                <strong>@provider.AverageRating.ToString("0.0")</strong>
+                                <strong>0.0</strong>
                             </div>
                         </div>
 
@@ -273,13 +272,7 @@
                                 </div>
                             }
 
-                            @if (!string.IsNullOrEmpty(provider.PhoneNumber))
-                            {
-                                <p class="text-muted small mb-3">
-                                    <i class="fas fa-phone me-1"></i>
-                                    <a href="tel:@provider.PhoneNumber" class="text-muted text-decoration-none">@provider.PhoneNumber</a>
-                                </p>
-                            }
+
 
                             <div class="mt-auto d-flex gap-2">
                                 <a asp-action="Details" asp-route-id="@provider.Id"
