@@ -5,6 +5,7 @@ using WebApplication1.Data;
 using WebApplication1.Models;
 using WebApplication1.Models.ViewModels;
 using WebApplication1.Services;
+using WebApplication1.Models.GooglePlaces;
 
 namespace WebApplication1.Controllers
 {
@@ -83,34 +84,37 @@ namespace WebApplication1.Controllers
         // ── GET /Provider/Details/{id} ─────────────────────────────────────────
 
         /// <summary>
-        /// Rich profile page for a single provider. Loads local data from DB
-        /// and enriches it with Google Places data via the caching service.
+        /// Rich profile page for a single provider. Loads data directly from Google Places API.
         /// </summary>
-        public async Task<IActionResult> Details(int id)
+        [Route("Provider/Details/{id}")]
+        public async Task<IActionResult> Details(string id)
         {
-            var barbershop = await _context.Barbershops
-                .Include(b => b.Services)
-                .FirstOrDefaultAsync(b => b.Id == id && b.IsActive);
+            if (string.IsNullOrWhiteSpace(id) || id == "0")
+                return NotFound("Place ID inválido.");
 
-            if (barbershop == null)
-                return NotFound();
+            // Fetch full extended details directly from Google Places API
+            var googleData = await _googlePlaces.GetFullPlaceDetailsAsync(id);
+            
+            if (googleData == null)
+                return NotFound("Não foi possível encontrar detalhes para este local no Google Places.");
 
-            var vm = new ProviderDetailsViewModel
+            var vm = new PlaceDetailsViewModel
             {
-                Barbershop = barbershop
+                PlaceId = googleData.PlaceId,
+                Name = googleData.Name,
+                FormattedAddress = googleData.FormattedAddress,
+                PhoneNumber = googleData.FormattedPhoneNumber ?? googleData.InternationalPhoneNumber,
+                Website = googleData.Website,
+                Rating = googleData.Rating,
+                UserRatingsTotal = googleData.UserRatingsTotal,
+                GoogleMapsUrl = googleData.GoogleMapsUrl,
+                IsOpenNow = googleData.OpeningHours?.IsOpenNow,
+                WeekdayText = googleData.OpeningHours?.WeekdayText ?? new List<string>(),
+                Photos = googleData.Photos,
+                Reviews = googleData.Reviews,
+                Lat = googleData.Lat,
+                Lng = googleData.Lng
             };
-
-            if (!string.IsNullOrWhiteSpace(barbershop.GooglePlaceId))
-            {
-                var googleData = await _googlePlaces.GetPlaceDetailsAsync(barbershop.GooglePlaceId);
-                if (googleData != null)
-                {
-                    vm.GoogleRating = googleData.Rating;
-                    vm.GoogleUserRatingsTotal = googleData.UserRatingsTotal;
-                    vm.GoogleMapsUrl = googleData.GoogleMapsUrl;
-                    vm.GoogleReviews = googleData.Reviews;
-                }
-            }
 
             return View(vm);
         }

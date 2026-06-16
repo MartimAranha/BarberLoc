@@ -244,8 +244,8 @@
                             <p class="card-text text-muted small mb-3 text-truncate" title="${place.address || ''}">
                                 <i class="bi bi-geo-alt me-1"></i> ${place.address || 'Endereço indisponível'}
                             </p>
-                            <a href="https://www.google.com/maps/place/?q=place_id:${place.placeId}" target="_blank" class="btn btn-outline-dark btn-sm w-100 fw-medium rounded-pill">
-                                <i class="bi bi-map me-1"></i> Ver no Google Maps
+                            <a href="/Provider/Details/${place.placeId}" target="_blank" class="btn btn-outline-dark btn-sm w-100 fw-medium rounded-pill">
+                                <i class="bi bi-info-circle me-1"></i> Ver Detalhes
                             </a>
                         </div>
                     </div>
@@ -279,7 +279,7 @@
                 <div class="p-2" style="max-width: 220px;">
                     <h6 class="fw-bold mb-1">${place.name}</h6>
                     <p class="text-muted small mb-2 text-truncate">${place.address}</p>
-                    <a href="https://www.google.com/maps/place/?q=place_id:${place.placeId}" target="_blank" class="btn btn-primary btn-sm w-100 rounded-pill fw-medium">Abrir</a>
+                    <a href="/Provider/Details/${place.placeId}" target="_blank" class="btn btn-primary btn-sm w-100 rounded-pill fw-medium">Ver Detalhes</a>
                 </div>
             `;
             infoWindow.setContent(content);

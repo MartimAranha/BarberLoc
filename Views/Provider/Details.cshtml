@@ -1,66 +1,56 @@
-@model WebApplication1.Models.ViewModels.ProviderDetailsViewModel
-@using WebApplication1.Models
+@model WebApplication1.Models.ViewModels.PlaceDetailsViewModel
 
 @{
-    ViewData["Title"] = Model.BarbershopName;
-    var b = Model.Barbershop;
-    var categoryLabel = b.Category switch
-    {
-        BarbershopCategory.HairSalon => "Cabeleireiro",
-        BarbershopCategory.Unisex => "Unisexo",
-        _ => "Barbearia"
-    };
-    var hasMobile = Model.Services.Any(s => s.IsAvailable && s.IsMobile);
+    ViewData["Title"] = Model.Name;
+    
+    // Infer category for UI purposes
+    var lowerName = Model.Name.ToLowerInvariant();
+    var categoryLabel = "Barbearia";
+    if (lowerName.Contains("cabeleireiro") || lowerName.Contains("salon") || lowerName.Contains("salão")) categoryLabel = "Cabeleireiro";
+    else if (lowerName.Contains("unisex")) categoryLabel = "Unisexo";
+
+    var heroImage = Model.Photos.Any() 
+        ? $"https://maps.googleapis.com/maps/api/place/photo?maxwidth=1600&photo_reference={Model.Photos.First().PhotoReference}&key={ViewBag.GoogleMapsApiKey ?? ""}" 
+        : "";
 }
 
 @* ── Provider Hero Banner ────────────────────────────────────────────────── *@
-<div class="provider-details-hero" @(string.IsNullOrEmpty(b.ImageUrl) ? "" : $"style=\"background-image:url('{b.ImageUrl}')\"")>
+<div class="provider-details-hero" @(!string.IsNullOrEmpty(heroImage) ? $"style=\"background-image:url('{heroImage}')\"" : "")>
     <div class="provider-details-hero__overlay"></div>
     <div class="container position-relative py-5">
-        <a asp-action="Index" class="btn btn-sm btn-glass mb-4">
+        <a href="/Provider" class="btn btn-sm btn-glass mb-4">
             <i class="fas fa-arrow-left me-1"></i> Voltar à pesquisa
         </a>
         <div class="row align-items-end">
             <div class="col-lg-8">
                 <div class="d-flex gap-2 mb-3 flex-wrap">
                     <span class="badge bg-white text-dark px-3 py-2">@categoryLabel</span>
-                    @if (hasMobile)
+                    @if (Model.IsOpenNow.HasValue)
                     {
-                        <span class="badge bg-warning text-dark px-3 py-2">
-                            <i class="fas fa-motorcycle me-1"></i>Serviço ao Domicílio
-                        </span>
-                    }
-                    @if (Model.IsGoogleDataMock)
-                    {
-                        <span class="badge bg-secondary px-3 py-2" title="Dados de demonstração (sem chave API configurada)">
-                            <i class="fas fa-flask me-1"></i>Demo
-                        </span>
+                        if (Model.IsOpenNow.Value)
+                        {
+                            <span class="badge bg-success px-3 py-2"><i class="fas fa-door-open me-1"></i>Aberto Agora</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger px-3 py-2"><i class="fas fa-door-closed me-1"></i>Fechado</span>
+                        }
                     }
                 </div>
-                <h1 class="provider-details-hero__name">@b.Name</h1>
+                <h1 class="provider-details-hero__name">@Model.Name</h1>
                 <p class="provider-details-hero__address">
-                    <i class="fas fa-map-marker-alt me-2"></i>@b.Address
+                    <i class="fas fa-map-marker-alt me-2"></i>@(Model.FormattedAddress ?? "Morada não disponível")
                 </p>
-                <div class="d-flex align-items-center gap-3 flex-wrap">
-                    @* Local rating *@
-                    <div class="rating-chip">
-                        @for (int i = 1; i <= 5; i++)
-                        {
-                            <i class="far fa-star text-warning"></i>
-                        }
-                        <span class="ms-1 text-white fw-bold">0.0</span>
-                        <span class="text-white opacity-75 small ms-1">(0 avaliações)</span>
-                    </div>
-
-                    @* Google rating pill *@
-                    @if (Model.GoogleRating.HasValue)
+                
+                <div class="d-flex align-items-center gap-3 flex-wrap mt-3">
+                    @if (Model.Rating.HasValue)
                     {
-                        <div class="rating-chip bg-danger">
-                            <i class="fab fa-google me-1"></i>
-                            <strong>@Model.GoogleRating.Value.ToString("0.0")</strong>
-                            @if (Model.GoogleUserRatingsTotal.HasValue)
+                        <div class="rating-chip bg-white text-dark">
+                            <i class="fab fa-google text-danger me-1"></i>
+                            <strong>@Model.Rating.Value.ToString("0.0")</strong>
+                            @if (Model.UserRatingsTotal.HasValue)
                             {
-                                <span class="opacity-75 small ms-1">(@Model.GoogleUserRatingsTotal.Value.ToString("N0"))</span>
+                                <span class="opacity-75 small ms-1">(@Model.UserRatingsTotal.Value.ToString("N0"))</span>
                             }
                         </div>
                     }
@@ -68,18 +58,12 @@
             </div>
 
             <div class="col-lg-4 text-lg-end mt-4 mt-lg-0">
-                <a asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@b.Id"
-                   class="btn btn-primary btn-lg px-5 shadow-lg" id="heroBookBtn">
-                    <i class="fas fa-calendar-plus me-2"></i> Reservar Agora
-                </a>
                 @if (!string.IsNullOrEmpty(Model.GoogleMapsUrl))
                 {
-                    <div class="mt-2">
-                        <a href="@Model.GoogleMapsUrl" target="_blank" rel="noopener noreferrer"
-                           class="btn btn-sm btn-glass">
-                            <i class="fab fa-google me-1"></i> Ver no Google Maps
-                        </a>
-                    </div>
+                    <a href="@Model.GoogleMapsUrl" target="_blank" rel="noopener noreferrer"
+                       class="btn btn-primary btn-lg px-5 shadow-lg">
+                        <i class="fas fa-map-marked-alt me-2"></i> Ver no Google Maps
+                    </a>
                 }
             </div>
         </div>
@@ -90,193 +74,167 @@
 <div class="container py-5">
     <div class="row g-5">
 
-        @* ── Left Column: Info + Map + Services ── *@
+        @* ── Left Column: Info + Photos + Map ── *@
         <div class="col-lg-7">
 
-            @* Info Card *@
+            @* Contact & Info Card *@
             <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-body p-4">
                     <h2 class="h5 fw-bold mb-4">
-                        <i class="fas fa-info-circle text-primary me-2"></i> Sobre o estabelecimento
+                        <i class="fas fa-info-circle text-primary me-2"></i> Contactos e Informações
                     </h2>
 
-                    @if (!string.IsNullOrEmpty(b.Description))
-                    {
-                        <p class="text-secondary mb-4">@b.Description</p>
-                    }
-
-                    <div class="row g-3">
-                        <div class="col-sm-6">
-                            <div class="d-flex align-items-start gap-3">
-                                <div class="info-icon"><i class="fas fa-map-marker-alt"></i></div>
-                                <div>
-                                    <div class="small text-muted fw-semibold mb-1">MORADA</div>
-                                    <div>@b.Address</div>
+                    <div class="row g-4">
+                        @if (!string.IsNullOrEmpty(Model.PhoneNumber))
+                        {
+                            <div class="col-sm-6">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="info-icon"><i class="fas fa-phone"></i></div>
+                                    <div>
+                                        <div class="small text-muted fw-semibold mb-1">TELEFONE</div>
+                                        <div><a href="tel:@Model.PhoneNumber" class="text-decoration-none text-dark fw-medium">@Model.PhoneNumber</a></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        }
 
-
+                        @if (!string.IsNullOrEmpty(Model.Website))
+                        {
+                            <div class="col-sm-6">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="info-icon"><i class="fas fa-globe"></i></div>
+                                    <div>
+                                        <div class="small text-muted fw-semibold mb-1">WEBSITE</div>
+                                        <div>
+                                            <a href="@Model.Website" target="_blank" class="text-decoration-none text-primary fw-medium text-truncate d-inline-block" style="max-width: 200px;">
+                                                Visitar Website
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
 
-            @* Map *@
-            <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-                <div id="detailsMap" style="height: 280px;"></div>
-            </div>
-
-            @* Services *@
-            @if (Model.Services.Any(s => s.IsAvailable))
+            @* Photos Gallery *@
+            @if (Model.Photos.Count > 1)
             {
-                <div class="card border-0 shadow-sm rounded-4 mb-4">
-                    <div class="card-body p-4">
-                        <h2 class="h5 fw-bold mb-4">
-                            <i class="fas fa-scissors text-primary me-2"></i> Serviços Disponíveis
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                    <div class="card-body p-4 pb-0">
+                        <h2 class="h5 fw-bold mb-3">
+                            <i class="fas fa-camera text-primary me-2"></i> Galeria de Fotos
                         </h2>
-                        <div class="row g-3">
-                            @foreach (var svc in Model.Services.Where(s => s.IsAvailable))
+                    </div>
+                    
+                    <div id="placePhotosCarousel" class="carousel slide" data-bs-ride="carousel">
+                        <div class="carousel-inner">
+                            @for (int i = 0; i < Model.Photos.Count; i++)
                             {
-                                <div class="col-sm-6">
-                                    <div class="service-card p-3 rounded-3 border h-100">
-                                        <div class="d-flex justify-content-between align-items-start mb-1">
-                                            <h6 class="mb-0 fw-bold">@svc.Name</h6>
-                                            <span class="fw-bold text-primary">€@svc.Price.ToString("0.00")</span>
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(svc.Description))
-                                        {
-                                            <p class="text-muted small mb-2">@svc.Description</p>
-                                        }
-                                        <div class="d-flex gap-2 flex-wrap">
-                                            <span class="badge bg-light text-dark border small">
-                                                <i class="fas fa-clock me-1"></i>@svc.DurationMinutes min
-                                            </span>
-                                            @if (svc.IsMobile)
-                                            {
-                                                <span class="badge bg-warning text-dark small">
-                                                    <i class="fas fa-home me-1"></i>Domicílio
-                                                </span>
-                                            }
-                                            <span class="badge bg-light text-secondary border small">
-                                                @(svc.TargetGender == TargetGender.Male ? "Homem" :
-                                                  svc.TargetGender == TargetGender.Female ? "Mulher" : "Unisexo")
-                                            </span>
-                                        </div>
-                                    </div>
+                                var photo = Model.Photos[i];
+                                <div class="carousel-item @(i == 0 ? "active" : "")">
+                                    <img src="https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=@photo.PhotoReference&key=@(ViewBag.GoogleMapsApiKey ?? "")" class="d-block w-100" style="height: 350px; object-fit: cover;" alt="Foto de @Model.Name">
                                 </div>
                             }
                         </div>
+                        <button class="carousel-control-prev" type="button" data-bs-target="#placePhotosCarousel" data-bs-slide="prev">
+                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Anterior</span>
+                        </button>
+                        <button class="carousel-control-next" type="button" data-bs-target="#placePhotosCarousel" data-bs-slide="next">
+                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Seguinte</span>
+                        </button>
                     </div>
+                </div>
+            }
+
+            @* Map *@
+            @if (Model.Lat.HasValue && Model.Lng.HasValue)
+            {
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                    <div id="detailsMap" style="height: 300px; width: 100%;"></div>
                 </div>
             }
         </div>
 
-        @* ── Right Column: Reviews + Booking CTA ── *@
+        @* ── Right Column: Hours + Reviews ── *@
         <div class="col-lg-5">
 
-            @* Booking CTA Sticky Card *@
-            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-primary text-white">
-                <div class="card-body p-4 text-center">
-                    <h3 class="h5 fw-bold mb-2">Pronto para marcar?</h3>
-                    <p class="opacity-75 small mb-4">Escolha o serviço, data e hora da sua preferência.</p>
-                    <a asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@b.Id"
-                       class="btn btn-white btn-lg w-100 fw-bold text-primary" id="sideBookBtn">
-                        <i class="fas fa-calendar-plus me-2"></i> Fazer Reserva
-                    </a>
-
-                </div>
-            </div>
-
-            @* Reviews Tabs *@
-            <div class="card border-0 shadow-sm rounded-4">
+            @* Opening Hours *@
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-body p-4">
-                    <h2 class="h5 fw-bold mb-3">
-                        <i class="fas fa-comments text-primary me-2"></i> Avaliações
+                    <h2 class="h5 fw-bold mb-4">
+                        <i class="fas fa-clock text-primary me-2"></i> Horário de Funcionamento
                     </h2>
 
-                    <ul class="nav nav-pills mb-4" id="reviewTabs" role="tablist">
-                        <li class="nav-item">
-                            <button class="nav-link active" id="local-tab" data-bs-toggle="tab"
-                                    data-bs-target="#localReviews" type="button" role="tab">
-                                <i class="fas fa-home me-1"></i> BarberLoc
-                                <span class="badge bg-secondary ms-1">0</span>
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" id="google-tab" data-bs-toggle="tab"
-                                    data-bs-target="#googleReviews" type="button" role="tab">
-                                <i class="fab fa-google text-danger me-1"></i> Google
-                                @if (Model.GoogleReviews.Any())
-                                {
-                                    <span class="badge bg-danger ms-1">@Model.GoogleReviews.Count</span>
-                                }
-                            </button>
-                        </li>
-                    </ul>
-
-                    <div class="tab-content">
-                        @* Local Reviews *@
-                        <div class="tab-pane fade show active" id="localReviews" role="tabpanel">
-                                <div class="text-center py-4 text-muted">
-                                    <i class="fas fa-comment-slash fa-2x mb-3 opacity-50"></i>
-                                    <p class="mb-0">Ainda não há avaliações. Seja o primeiro!</p>
-                                </div>
-                        </div>
-
-                        @* Google Reviews *@
-                        <div class="tab-pane fade" id="googleReviews" role="tabpanel">
-                            @if (Model.GoogleReviews.Any())
+                    @if (Model.WeekdayText != null && Model.WeekdayText.Any())
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var day in Model.WeekdayText)
                             {
-                                @if (Model.IsGoogleDataMock)
-                                {
-                                    <div class="alert alert-warning border-0 small py-2 mb-3">
-                                        <i class="fas fa-flask me-1"></i>
-                                        Dados de demonstração (configure <code>Google:PlacesApiKey</code> para dados reais).
-                                    </div>
-                                }
-                                @foreach (var gReview in Model.GoogleReviews)
-                                {
-                                    <div class="review-item mb-3 pb-3 border-bottom">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <div class="fw-semibold">
-                                                <i class="fab fa-google text-danger me-1"></i>
-                                                @gReview.AuthorName
-                                            </div>
-                                            <small class="text-muted">@gReview.RelativeTimeDescription</small>
-                                        </div>
-                                        <div class="mb-1">
-                                            @for (int i = 1; i <= 5; i++)
-                                            {
-                                                <i class="@(i <= gReview.Rating ? "fas" : "far") fa-star text-warning small"></i>
-                                            }
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(gReview.Text))
-                                        {
-                                            <p class="mb-0 text-secondary small">@gReview.Text</p>
-                                        }
-                                    </div>
-                                }
+                                var parts = day.Split(new[] { ": " }, 2, System.StringSplitOptions.None);
+                                var dayName = parts.Length > 0 ? parts[0] : day;
+                                var hours = parts.Length > 1 ? parts[1] : "";
+                                
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent border-light">
+                                    <span class="fw-medium text-dark">@dayName</span>
+                                    <span class="text-muted">@hours</span>
+                                </li>
                             }
-                            else if (!string.IsNullOrWhiteSpace(b.PlaceId))
-                            {
-                                <div class="text-center py-4 text-muted">
-                                    <i class="fab fa-google fa-2x mb-3 opacity-50"></i>
-                                    <p class="mb-0">Sem avaliações do Google disponíveis.</p>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="text-center py-4 text-muted">
-                                    <i class="fas fa-exclamation-triangle fa-2x mb-3 opacity-50"></i>
-                                    <p class="mb-0">ID Google Maps não configurado para este estabelecimento.</p>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">Horário não disponível.</p>
+                    }
                 </div>
             </div>
-        </div>
 
+            @* Reviews *@
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-bold mb-4">
+                        <i class="fab fa-google text-danger me-2"></i> Avaliações
+                    </h2>
+
+                    @if (Model.Reviews != null && Model.Reviews.Any())
+                    {
+                        foreach (var review in Model.Reviews)
+                        {
+                            <div class="review-card mb-3 p-3 bg-light rounded-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <img src="@(review.ProfilePhotoUrl ?? "https://via.placeholder.com/40")" alt="@review.AuthorName" class="rounded-circle me-2" style="width: 40px; height: 40px;" />
+                                    <div>
+                                        <h6 class="mb-0 fw-bold">@review.AuthorName</h6>
+                                        <small class="text-muted">@review.RelativeTimeDescription</small>
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <i class="@(i <= review.Rating ? "fas" : "far") fa-star text-warning small"></i>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(review.Text))
+                                {
+                                    <p class="mb-0 text-secondary small">@review.Text</p>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center py-4 text-muted">
+                            <i class="far fa-comment-dots fa-2x mb-3 opacity-50"></i>
+                            <p class="mb-0">Sem avaliações disponíveis.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
     </div>
 </div>
 
@@ -286,8 +244,8 @@
 
     <style>
         .provider-details-hero {
-            min-height: 380px;
-            background: linear-gradient(135deg, #1a1a2e, #0f3460);
+            min-height: 400px;
+            background-color: #1a1a2e;
             background-size: cover;
             background-position: center;
             position: relative;
@@ -295,18 +253,18 @@
         .provider-details-hero__overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(180deg, rgba(10,10,30,0.55) 0%, rgba(10,10,30,0.85) 100%);
+            background: linear-gradient(180deg, rgba(15,23,42,0.7) 0%, rgba(15,23,42,0.95) 100%);
         }
         .provider-details-hero__name {
-            font-size: 2.2rem;
+            font-size: 2.5rem;
             font-weight: 800;
             color: #fff;
             letter-spacing: -0.5px;
             text-shadow: 0 2px 8px rgba(0,0,0,0.4);
         }
         .provider-details-hero__address {
-            color: rgba(255,255,255,0.8);
-            font-size: 1rem;
+            color: rgba(255,255,255,0.85);
+            font-size: 1.1rem;
         }
         .btn-glass {
             background: rgba(255,255,255,0.15);
@@ -318,65 +276,47 @@
             background: rgba(255,255,255,0.25);
             color: #fff;
         }
-        .btn-white {
-            background: #fff;
-            border-color: #fff;
-        }
-        .btn-white:hover {
-            background: #f0f0f0;
-        }
         .rating-chip {
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.25);
             border-radius: 50px;
-            padding: 6px 14px;
+            padding: 8px 16px;
             display: flex;
             align-items: center;
-            gap: 3px;
-            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .info-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: rgba(67,97,238,0.1);
             color: #4361ee;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            font-size: 0.9rem;
+            font-size: 1.1rem;
         }
-        .service-card {
-            background: #f8f9ff;
-            border-color: #e8eaf6 !important;
-            transition: border-color 0.2s, box-shadow 0.2s;
+        .review-card {
+            border: 1px solid #f1f3f5;
         }
-        .service-card:hover {
-            border-color: #4361ee !important;
-            box-shadow: 0 4px 12px rgba(67,97,238,0.1);
-        }
-        .review-item:last-child { border-bottom: none !important; }
     </style>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var lat = @b.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var lng = @b.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    @if (Model.Lat.HasValue && Model.Lng.HasValue)
+    {
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var lat = @Model.Lat.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var lng = @Model.Lng.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-            if (lat !== 0 && lng !== 0) {
-                var map = L.map('detailsMap').setView([lat, lng], 15);
+                var map = L.map('detailsMap').setView([lat, lng], 16);
                 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 }).addTo(map);
+                
                 L.marker([lat, lng]).addTo(map)
-                    .bindPopup('<b>@Html.Raw(b.Name.Replace("'", "\\'"))</b><br>@Html.Raw(b.Address.Replace("'", "\\'"))')
+                    .bindPopup('<b>@Html.Raw(Model.Name.Replace("'", "\\'"))</b>')
                     .openPopup();
-            } else {
-                document.getElementById('detailsMap').innerHTML =
-                    '<div class="d-flex justify-content-center align-items-center h-100 bg-light text-muted">Localização indisponível</div>';
-            }
-        });
-    </script>
+            });
+        </script>
+    }
 }
