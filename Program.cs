@@ -23,6 +23,10 @@ namespace WebApplication1
             builder.Services.AddHttpClient<GooglePlacesService>();
             builder.Services.AddScoped<IGooglePlacesService, GooglePlacesService>();
 
+            // ── Email Service ──────────────────────────────────────────────────
+            // IEmailSender: our own abstraction used by ForgotPassword/ResetPassword pages.
+            builder.Services.AddScoped<IEmailSender, EmailSender>();
+
             // ── EF Core / SQL Server ───────────────────────────────────────────
             // EnableRetryOnFailure handles transient errors:
             //   • LocalDB named-pipe not yet open at startup (auto-start latency ~200–500 ms)
