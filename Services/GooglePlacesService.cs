@@ -674,17 +674,33 @@ namespace WebApplication1.Services
                             photoRef = pr.GetString();
                         }
 
+                        // Read the 'types' array from the Google API response — this is the authoritative
+                        // signal for classification. e.g. ["barber"], ["hair_salon", "beauty_salon"], etc.
+                        var itemTypes = new List<string>();
+                        if (item.TryGetProperty("types", out var typesEl))
+                        {
+                            foreach (var t in typesEl.EnumerateArray())
+                            {
+                                var typeStr = t.GetString();
+                                if (!string.IsNullOrEmpty(typeStr)) itemTypes.Add(typeStr);
+                            }
+                        }
+
+                        var itemName = item.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? string.Empty : string.Empty;
+
                         results.Add(new Models.ViewModels.BarberShopPlaceViewModel
                         {
                             PlaceId = placeId,
-                            Name = item.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
+                            Name = itemName,
                             Address = item.TryGetProperty("formatted_address", out var fmtAddr) ? fmtAddr.GetString() :
                                       (item.TryGetProperty("vicinity", out var vic) ? vic.GetString() : null),
                             Rating = item.TryGetProperty("rating", out var rat) ? rat.GetDouble() : null,
                             UserRatingsTotal = item.TryGetProperty("user_ratings_total", out var urt) ? urt.GetInt32() : null,
                             Lat = itemLat.Value,
                             Lng = itemLng.Value,
-                            PhotoReference = photoRef
+                            PhotoReference = photoRef,
+                            // Set Category authoritatively from types[] — eliminates all downstream heuristics.
+                            Category = ClassifyCategoryFromTypes(itemTypes, itemName)
                         });
                     }
                 }
@@ -705,6 +721,47 @@ namespace WebApplication1.Services
             _logger.LogInformation("[GooglePlacesService] Successfully mapped {Count} places across pages.", resultList.Count);
 
             return resultList;
+        }
+
+        /// <summary>
+        /// Classifies a Google Places result into one of our three categories using the authoritative
+        /// <c>types[]</c> array returned by the API. Falls back to name-keyword matching only when the
+        /// <c>types</c> array is absent or contains only generic types (e.g. "establishment", "point_of_interest").
+        /// </summary>
+        /// <param name="types">The list of type strings from the Google Places <c>types</c> array.</param>
+        /// <param name="name">The establishment name — used only as a secondary fallback signal.</param>
+        /// <returns>
+        ///   <c>"Barbershop"</c> | <c>"HairSalon"</c> | <c>"Unisex"</c>
+        /// </returns>
+        private static string ClassifyCategoryFromTypes(IReadOnlyList<string> types, string name)
+        {
+            bool hasBarber    = types.Contains("barber");
+            bool hasHairSalon = types.Contains("hair_salon") || types.Contains("beauty_salon");
+
+            // Authoritative API-level classification — no name guessing needed.
+            if (hasBarber && hasHairSalon) return "Unisex";
+            if (hasBarber)                return "Barbershop";
+            if (hasHairSalon)             return "HairSalon";
+
+            // Secondary fallback: use the business name only when types[] is inconclusive.
+            // This handles edge cases where Google returns only generic types like
+            // ["establishment", "point_of_interest"] for some results.
+            var lower = name.ToLowerInvariant();
+
+            if (lower.Contains("barbearia") || lower.Contains("barber") || lower.Contains("navalha"))
+                return "Barbershop";
+
+            if (lower.Contains("cabeleireiro") || lower.Contains("salão") || lower.Contains("salon") ||
+                lower.Contains("beauty")       || lower.Contains("spa")   || lower.Contains("nails") ||
+                lower.Contains("unhas")        || lower.Contains("xb")    || lower.Contains("feminino") ||
+                lower.Contains("vocêviva")     || lower.Contains("estética"))
+                return "HairSalon";
+
+            if (lower.Contains("unisex") || lower.Contains("hair") || lower.Contains("studio"))
+                return "Unisex";
+
+            // Final default: treat as a barbershop (the most common result from a barber-biased query).
+            return "Barbershop";
         }
 
         private static IEnumerable<Models.ViewModels.BarberShopPlaceViewModel> ParseNearbySearchResponse(string json, string apiKey)

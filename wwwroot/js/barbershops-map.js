@@ -67,7 +67,7 @@ window.initMap = function () {
     };
 
     map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 13,
+        zoom: 14,
         center: defaultCenter,
         mapTypeControl: false,
         fullscreenControl: true,
@@ -76,9 +76,17 @@ window.initMap = function () {
         // info windows from opening when the user clicks anywhere on the map.
         clickableIcons: false,
         mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement to render!
+        // Hide native POIs to reduce clutter
         styles: [
-            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-            { featureType: 'transit', stylers: [{ visibility: 'simplified' }] }
+            {
+                featureType: "poi",
+                stylers: [{ visibility: "off" }]
+            },
+            {
+                featureType: "transit",
+                elementType: "labels.icon",
+                stylers: [{ visibility: "off" }]
+            }
         ]
     });
 
@@ -93,16 +101,18 @@ window.initMap = function () {
                 lng: position.coords.longitude
             };
 
-            // Create the pulsing blue dot element
-            const pinElement = document.createElement('div');
-            pinElement.className = 'user-location-marker';
-            pinElement.innerHTML = '<div class="blue-dot"></div><div class="blue-dot-pulse"></div>';
+            const pinElement = new google.maps.marker.PinElement({
+                background: '#4285F4',
+                borderColor: '#4285F4',
+                glyphColor: 'white',
+                scale: 1.2
+            });
 
             // Use the modern AdvancedMarkerElement required by Google Maps in 2026
             const userMarker = new google.maps.marker.AdvancedMarkerElement({
                 map: map,
                 position: userPos,
-                content: pinElement,
+                content: pinElement.element,
                 title: "A sua localização"
             });
         }, function() {
@@ -149,23 +159,34 @@ function renderMarkers(places) {
     markers.forEach(m => m.setMap(null));
     markers = [];
 
+    const colours = {
+        Barbershop: '#3b5bdb',   // indigo
+        HairSalon:  '#d6336c',   // pink
+        Unisex:     '#0ca678',   // teal
+        default:    '#495057'
+    };
+
     places.forEach(place => {
-        // FIX 2: Using google.maps.Marker (legacy, stable) without the `marker` library.
-        // addListener('click') is fully supported and reliable on this constructor.
-        const marker = new google.maps.Marker({
-            position: { lat: place.lat, lng: place.lng },
-            map: map,                      // attached immediately — not deferred
-            title: place.name,
-            label: {
-                text: place.rating ? place.rating.toFixed(1) : '?',
-                color: '#fff',
-                fontWeight: 'bold',
-                fontSize: '11px'
-            },
-            icon: buildMarkerIcon(place.category),
-            // Ensure the marker is above all other map elements
-            zIndex: google.maps.Marker.MAX_ZINDEX + 1
+        const color = colours[place.category] || colours.default;
+
+        // Use standard PinElement instead of custom HTML which had layout issues
+        const pinElement = new google.maps.marker.PinElement({
+            background: color,
+            borderColor: color,
+            glyphColor: 'white',
+            scale: 1.1
         });
+
+        // Initialize the advanced marker with the standard PinElement
+        const marker = new google.maps.marker.AdvancedMarkerElement({
+            map: map,
+            position: { lat: place.lat, lng: place.lng },
+            content: pinElement.element,
+            title: place.name || 'Barbearia'
+        });
+
+        // Set high zIndex so it floats above normal map elements
+        marker.zIndex = 1000;
 
         // Attach place metadata directly to the marker object
         marker._placeId      = place.placeId;
@@ -173,11 +194,14 @@ function renderMarkers(places) {
         marker._placeAddress = place.address;
         marker._placeData    = place;
 
-        // FIX 2: listener attached immediately after marker creation.
-        // google.maps.event.addListener is used (not the shorthand) to be explicit
-        // and to allow future removal if needed.
-        google.maps.event.addListener(marker, 'click', function () {
-            handleMarkerClick(this);
+        // Attach click listener to the pin element itself for reliability
+        pinElement.element.addEventListener('click', function () {
+            handleMarkerClick(marker);
+        });
+
+        // Also add the traditional map click listener as fallback
+        marker.addListener('click', function () {
+            handleMarkerClick(marker);
         });
 
         // Store in module-scope array — prevents GC from destroying the marker object
@@ -676,7 +700,10 @@ function applyFilters() {
                               lowerName.includes('salon') || 
                               lowerName.includes('studio') || 
                               lowerName.includes('beauty') || 
-                              lowerName.includes('feminino');
+                              lowerName.includes('feminino') ||
+                              lowerName.includes('xb') ||
+                              lowerName.includes('vocêviva') ||
+                              lowerName.includes('salão');
                 if (!isSalon) return false;
             } else if (activeFilters.category === 'Unisex') {
                 if (category !== 'Unisex') return false;

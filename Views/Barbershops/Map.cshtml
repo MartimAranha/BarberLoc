@@ -216,6 +216,6 @@
 
     @if (!string.IsNullOrWhiteSpace(googleApiKey))
     {
-        <script src="https://maps.googleapis.com/maps/api/js?key=@googleApiKey&callback=initMap" async defer></script>
+        <script src="https://maps.googleapis.com/maps/api/js?key=@googleApiKey&libraries=marker&callback=initMap" async defer></script>
     }
 }

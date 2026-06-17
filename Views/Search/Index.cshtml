@@ -13,6 +13,11 @@
         height: 100vh;
         overflow-y: auto;
     }
+    /* Premium visual overrides */
+    .btn-primary { background: #4361ee; border-color: #4361ee; }
+    .btn-primary:hover { background: #3f37c9; border-color: #3f37c9; }
+    .bg-purple-premium { background-color: #7209b7 !important; color: #fff; }
+    
     .place-card {
         transition: transform 0.2s, box-shadow 0.2s;
         border-radius: 0.75rem;
@@ -39,7 +44,9 @@
             <div class="p-4 border-bottom bg-white sticky-top shadow-sm z-2">
                 <h4 class="mb-3 fw-bold text-dark">Barbearias e Salões</h4>
                 <div class="input-group mb-3">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <button class="btn border border-end-0 bg-white text-muted" type="button" id="searchBtn">
+                        <i class="bi bi-search"></i>
+                    </button>
                     <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Procurar local (ex: Lisboa)...">
                 </div>
                 <div class="d-flex align-items-center justify-content-between">
@@ -55,7 +62,7 @@
                     <div class="spinner-border text-primary mb-3 d-none" id="loadingSpinner" role="status">
                         <span class="visually-hidden">A carregar...</span>
                     </div>
-                    <p id="emptyStateMsg">Mova o mapa para pesquisar barbearias.</p>
+                    <p id="emptyStateMsg">Mova o mapa ou use o botão <strong>'Perto de mim'</strong> para descobrir barbearias e cabeleireiros.</p>
                 </div>
             </div>
         </div>
@@ -71,7 +78,7 @@
     <!-- If Bootstrap Icons are missing in _Layout, we add them here for this view just in case -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     
-    <script src="https://maps.googleapis.com/maps/api/js?key=@ViewBag.GoogleMapsApiKey&libraries=places&callback=initMap" async defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=@ViewBag.GoogleMapsApiKey&libraries=places,marker&callback=initMap" async defer></script>
     <script>
         let map;
         let markers = [];
@@ -89,42 +96,50 @@
                 mapTypeControl: false,
                 streetViewControl: false,
                 fullscreenControl: false,
-                styles: [
-                    {
-                        featureType: "poi",
-                        elementType: "labels",
-                        stylers: [{ visibility: "off" }]
-                    }
-                ]
+                mapId: 'DEMO_MAP_ID'
+                // styles: [...] removed because custom themes are managed via Cloud Console with mapId
             });
 
             infoWindow = new google.maps.InfoWindow();
 
-            // Set up SearchBox
+            // Geocoding Search Logic
             const input = document.getElementById("searchInput");
-            searchBox = new google.maps.places.SearchBox(input);
+            const searchBtn = document.getElementById("searchBtn");
 
-            // Bias the SearchBox results towards current map's viewport.
-            map.addListener("bounds_changed", () => {
-                searchBox.setBounds(map.getBounds());
+            function performSearch() {
+                const searchAddress = input.value;
+                if (searchAddress && searchAddress.trim() !== "") {
+                    const geocoder = new google.maps.Geocoder();
+                    
+                    geocoder.geocode({ address: searchAddress }, function (results, status) {
+                        if (status === google.maps.GeocoderStatus.OK && results[0]) {
+                            const newCenter = results[0].geometry.location;
+                            
+                            // 1. Move the map to the new searched locality smoothly
+                            map.setCenter(newCenter);
+                            map.setZoom(14);
+                            
+                            // 2. Trigger fetch function to get results around this new center
+                            fetchLiveResults(); 
+                        } else {
+                            console.log("Geocode was not successful for the following reason: " + status);
+                        }
+                    });
+                }
+            }
+
+            // Bind Enter key
+            input.addEventListener("keypress", function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    performSearch();
+                }
             });
 
-            // Listen for the event fired when the user selects a prediction
-            searchBox.addListener("places_changed", () => {
-                const places = searchBox.getPlaces();
-                if (places.length == 0) return;
-
-                const bounds = new google.maps.LatLngBounds();
-                places.forEach((place) => {
-                    if (!place.geometry || !place.geometry.location) return;
-                    if (place.geometry.viewport) {
-                        bounds.union(place.geometry.viewport);
-                    } else {
-                        bounds.extend(place.geometry.location);
-                    }
-                });
-                map.fitBounds(bounds);
-            });
+            // Bind Search button
+            if (searchBtn) {
+                searchBtn.addEventListener("click", performSearch);
+            }
 
             // Fetch live results when the user physically moves or zooms the map
             map.addListener("dragend", fetchLiveResults);
@@ -228,7 +243,7 @@
 
             if (places.length === 0) {
                 if (emptyStateMsg != null) {
-                    emptyStateMsg.textContent = "Não foram encontradas barbearias nesta zona.";
+                    emptyStateMsg.textContent = "Sem resultados nesta zona. Experimente uma área diferente.";
                     emptyStateMsg.classList.remove("d-none");
                 }
                 return;
@@ -236,28 +251,55 @@
 
             places.forEach((place, index) => {
                 // Add marker
-                console.log(`Plotting marker for ${place.name} at Coordinates:`, place.latitude, place.longitude);
+                // Create custom HTML Pin
+                const markerContainer = document.createElement('div');
+                markerContainer.className = 'custom-map-pin-wrapper';
+
+                const pinIcon = document.createElement('div');
+                pinIcon.className = 'custom-pin-dot';
+                
+                // Use the authoritative category string set by the server — no name guessing.
+                let categoryColor = '#495057'; // default (unknown)
+                if (place.category === 'Barbershop')      categoryColor = '#3b5bdb'; // blue
+                else if (place.category === 'HairSalon')  categoryColor = '#d6336c'; // pink/purple
+                else if (place.category === 'Unisex')     categoryColor = '#0ca678'; // teal
+                
+                pinIcon.style.backgroundColor = categoryColor;
+
+                const pinLabel = document.createElement('div');
+                pinLabel.className = 'custom-pin-label';
+                pinLabel.textContent = place.name || 'Barbearia';
+
+                markerContainer.appendChild(pinIcon);
+                markerContainer.appendChild(pinLabel);
+
                 const position = { lat: place.latitude, lng: place.longitude };
-                const marker = new google.maps.Marker({
+                const marker = new google.maps.marker.AdvancedMarkerElement({
                     position: position,
                     map: map,
                     title: place.name,
-                    animation: google.maps.Animation.DROP
+                    content: markerContainer
                 });
+                marker.zIndex = 1000;
 
                 markers.push(marker);
 
                 // Add list item
+                // Use the authoritative category from the server.
+                // Map the canonical strings to Portuguese display labels.
+                const categoryDisplayMap = { 'Barbershop': 'Barbearia', 'HairSalon': 'Cabeleireiro', 'Unisex': 'Unisexo' };
+                const placeCategory = categoryDisplayMap[place.category] || 'Barbearia';
+                const categoryBadge = place.category === 'Barbershop' ? 'bg-dark' : (place.category === 'HairSalon' ? 'bg-purple-premium' : 'bg-secondary text-dark');
+
                 const stars = getStars(place.rating || 0);
                 const reviewsText = place.userRatingsTotal ? `(${place.userRatingsTotal} avaliações)` : "Novo";
-                const categoryBadge = place.category === 'Barbearia' ? 'bg-dark' : (place.category === 'Cabeleireiro' ? 'bg-info' : 'bg-secondary text-dark');
 
                 const cardHtml = `
                     <div class="card border-0 shadow-sm mb-3 place-card" id="card-${index}">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <h5 class="card-title fw-bold mb-0 text-truncate me-2" title="${place.name}">${place.name}</h5>
-                                <span class="badge ${categoryBadge}">${place.category}</span>
+                                <span class="badge ${categoryBadge}">${placeCategory}</span>
                             </div>
                             <div class="mb-2 text-warning small fw-medium">
                                 ${place.rating ? `<strong>${place.rating.toFixed(1)}</strong> ${stars}` : '<span class="text-muted">Sem avaliações</span>'}
@@ -279,8 +321,12 @@
                 const cardEl = document.getElementById(`card-${index}`);
                 
                 cardEl.addEventListener("mouseenter", () => {
-                    marker.setAnimation(google.maps.Animation.BOUNCE);
-                    setTimeout(() => marker.setAnimation(null), 750);
+                    markerContainer.style.transform = 'scale(1.1) translateY(-6px)';
+                    markerContainer.style.boxShadow = '0 8px 20px rgba(0,0,0,0.4)';
+                    setTimeout(() => {
+                        markerContainer.style.transform = '';
+                        markerContainer.style.boxShadow = '';
+                    }, 750);
                 });
 
                 cardEl.addEventListener("click", () => {
@@ -289,6 +335,12 @@
                     showInfoWindow(marker, place);
                 });
 
+                markerContainer.addEventListener("click", () => {
+                    showInfoWindow(marker, place);
+                    cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+                
+                // Fallback traditional listener
                 marker.addListener("click", () => {
                     showInfoWindow(marker, place);
                     cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });

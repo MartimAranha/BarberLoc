@@ -43,27 +43,48 @@ namespace WebApplication1.Controllers
             double lng = -9.1393;
             int radius = (vm.RadiusInKm > 0 ? vm.RadiusInKm : 15) * 1000;
 
-            var searchQuery = string.IsNullOrWhiteSpace(vm.SearchQuery) ? "Barbearia" : vm.SearchQuery;
+            // Focus the Google Text Search query on the active category filter so that
+            // Google's own ranking biases results toward the correct type before we filter.
+            string searchQuery;
+            if (!string.IsNullOrWhiteSpace(vm.SearchQuery))
+            {
+                searchQuery = vm.SearchQuery;
+            }
+            else
+            {
+                searchQuery = vm.ServiceGender switch
+                {
+                    "Cabeleireiro" => "cabeleireiro salão de beleza",
+                    "Barbearia"    => "barbearia barber shop",
+                    _              => "barbearia cabeleireiro salão de beleza"
+                };
+            }
 
-            // Fetch live Google Places data
+            // Fetch live Google Places data — Category is set authoritatively by the service.
             var liveResults = await _googlePlaces.FetchLiveBarbershopsAsync(lat, lng, radius, searchQuery);
 
             var mappedResults = liveResults.Select(r => new Barbershop
             {
-                Id = 0, // Map live results with no DB ID
+                Id = 0, // Live results have no DB ID
                 GooglePlaceId = r.PlaceId,
                 Name = r.Name,
                 Address = r.Address ?? "Sem morada",
                 Latitude = r.Lat,
                 Longitude = r.Lng,
-                ImageUrl = r.PhotoUrl, // Mapped to the proxy photo URL
-                Category = InferCategory(r.Category),
+                ImageUrl = r.PhotoUrl,
+                // InferCategory maps the authoritative string set by GooglePlacesService.
+                Category = r.Category switch
+                {
+                    "HairSalon" => BarbershopCategory.HairSalon,
+                    "Unisex"    => BarbershopCategory.Unisex,
+                    _           => BarbershopCategory.Barbershop
+                },
                 Rating = r.Rating,
                 UserRatingsTotal = r.UserRatingsTotal,
-                Services = new List<Service>() // Real services would require the DB
+                Services = new List<Service>()
             }).AsEnumerable();
 
-            // ── Filter ────────────────────────────────────────────────────────
+            // ── Filter: pure Category-based predicates — no name-keyword heuristics ────
             if (vm.MinRating.HasValue)
             {
                 mappedResults = mappedResults.Where(r => r.Rating >= vm.MinRating.Value);
@@ -71,34 +92,21 @@ namespace WebApplication1.Controllers
 
             if (!string.IsNullOrEmpty(vm.ServiceGender) && vm.ServiceGender != "Todos")
             {
-                if (vm.ServiceGender == "Barbearia")
+                mappedResults = vm.ServiceGender switch
                 {
-                    mappedResults = mappedResults.Where(r => 
-                        r.Category == BarbershopCategory.Barbershop || 
-                        r.Name.Contains("Barbearia", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Barber", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Dom", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Men", StringComparison.OrdinalIgnoreCase));
-                }
-                else if (vm.ServiceGender == "Cabeleireiro")
-                {
-                    mappedResults = mappedResults.Where(r => 
-                        r.Category == BarbershopCategory.HairSalon || 
-                        r.Name.Contains("Cabeleireiro", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Salon", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Studio", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Beauty", StringComparison.OrdinalIgnoreCase) ||
-                        r.Name.Contains("Feminino", StringComparison.OrdinalIgnoreCase));
-                }
+                    "Barbearia"    => mappedResults.Where(r => r.Category == BarbershopCategory.Barbershop),
+                    "Cabeleireiro" => mappedResults.Where(r => r.Category == BarbershopCategory.HairSalon),
+                    _              => mappedResults
+                };
             }
 
             // ── Sort ──────────────────────────────────────────────────────────
             var allResults = vm.SortBy switch
             {
-                "name" => mappedResults.OrderBy(b => b.Name).ToList(),
+                "name"   => mappedResults.OrderBy(b => b.Name).ToList(),
                 "rating" => mappedResults.OrderByDescending(b => b.Rating ?? 0).ToList(),
                 "newest" => mappedResults.OrderByDescending(b => b.CreatedAt).ToList(),
-                _ => mappedResults.OrderByDescending(b => b.Rating ?? 0).ToList() // default: rating
+                _        => mappedResults.OrderByDescending(b => b.Rating ?? 0).ToList()
             };
 
             vm.Results = allResults;
@@ -107,12 +115,6 @@ namespace WebApplication1.Controllers
             return View(vm);
         }
 
-        private static BarbershopCategory InferCategory(string? category)
-        {
-            if (category == "HairSalon") return BarbershopCategory.HairSalon;
-            if (category == "Unisex") return BarbershopCategory.Unisex;
-            return BarbershopCategory.Barbershop;
-        }
 
         // ── GET /Provider/Details/{id} ─────────────────────────────────────────
 

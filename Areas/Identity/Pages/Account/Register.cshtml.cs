@@ -36,15 +36,13 @@ namespace WebApplication1.Areas.Identity.Pages.Account
             [EmailAddress]
             public string Email { get; set; } = string.Empty;
 
-            [Phone]
-            // Phone number removed from registration form (not required)
-
-            [Required]
+            [Required(ErrorMessage = "A senha é obrigatória.")]
             [DataType(DataType.Password)]
+            [StringLength(100, ErrorMessage = "A {0} deve ter pelo menos {2} caracteres.", MinimumLength = 6)]
             public string Password { get; set; } = string.Empty;
 
             [DataType(DataType.Password)]
-            [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
+            [Compare("Password", ErrorMessage = "A senha e a confirmação de senha não coincidem.")]
             public string ConfirmPassword { get; set; } = string.Empty;
         }
 

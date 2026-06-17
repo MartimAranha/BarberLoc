@@ -44,35 +44,22 @@ namespace WebApplication1.Controllers
 
             var liveResults = await _placesService.FetchLiveBarbershopsAsync(lat, lng, radius);
 
+            // Category is now set authoritatively by GooglePlacesService.ClassifyCategoryFromTypes.
+            // No name-based heuristic needed here — use vm.Category directly.
             var response = liveResults.Select(vm => new BarbershopSearchViewModel
             {
-                PlaceId = vm.PlaceId,
-                Name = vm.Name,
-                Address = vm.Address,
-                Rating = vm.Rating,
+                PlaceId          = vm.PlaceId,
+                Name             = vm.Name,
+                Address          = vm.Address,
+                Rating           = vm.Rating,
                 UserRatingsTotal = vm.UserRatingsTotal,
-                Latitude = vm.Lat,
-                Longitude = vm.Lng,
-                PhotoUrl = vm.PhotoUrl,
-                Category = InferCategory(vm.Name)
+                Latitude         = vm.Lat,
+                Longitude        = vm.Lng,
+                PhotoUrl         = vm.PhotoUrl,
+                Category         = vm.Category  // "Barbershop" | "HairSalon" | "Unisex"
             });
 
             return Json(response);
-        }
-
-        private static string InferCategory(string name)
-        {
-            var lower = name.ToLowerInvariant();
-            if (lower.Contains("cabeleireiro") || lower.Contains("salão") ||
-                lower.Contains("salon")        || lower.Contains("beauty") ||
-                lower.Contains("spa")          || lower.Contains("nails")  ||
-                lower.Contains("unhas"))
-                return "Cabeleireiro";
-
-            if (lower.Contains("unisex") || lower.Contains("hair"))
-                return "Unisexo";
-
-            return "Barbearia";
         }
     }
 }

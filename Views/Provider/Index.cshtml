@@ -34,7 +34,7 @@
                                     <input asp-for="SearchQuery"
                                            type="text"
                                            class="form-control border-start-0 ps-0"
-                                           placeholder="Pesquisar por nome, morada ou serviço..."
+                                           placeholder="Introduza o nome da barbearia ou cabeleireiro..."
                                            id="searchInput"
                                            autocomplete="off" />
                                     <button type="submit" class="btn btn-primary px-4" id="searchBtn">
@@ -170,17 +170,21 @@
             @foreach (var provider in Model.Results)
             {
                 var hasMobile = provider.Services.Any(s => s.IsAvailable && s.IsMobile);
+
+                // Use provider.Category directly — set authoritatively by GooglePlacesService.
+                // No redundant name-keyword heuristics here.
                 var categoryLabel = provider.Category switch
                 {
                     BarbershopCategory.HairSalon => "Cabeleireiro",
-                    BarbershopCategory.Unisex => "Unisexo",
-                    _ => "Barbearia"
+                    BarbershopCategory.Unisex    => "Unisexo",
+                    _                            => "Barbearia"
                 };
+
                 var categoryColor = provider.Category switch
                 {
-                    BarbershopCategory.HairSalon => "bg-pink",
-                    BarbershopCategory.Unisex => "bg-info",
-                    _ => "bg-primary"
+                    BarbershopCategory.HairSalon => "bg-purple-premium",
+                    BarbershopCategory.Unisex    => "bg-info",
+                    _                            => "bg-primary"
                 };
 
                 <div class="col-md-6 col-xl-4 provider-card-col">
@@ -368,6 +372,7 @@
         color: #1a1a2e;
     }
     .bg-pink { background-color: #e91e8c !important; }
+    .bg-purple-premium { background-color: #7209b7 !important; color: #fff; }
     .text-accent { color: #4361ee; }
 </style>
 <script>
