@@ -1,8 +1,13 @@
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
 @model WebApplication1.Models.ViewModels.BarbershopDetailsViewModel
 
 @{
     ViewData["Title"] = Model.Name;
 }
+
+@* Hidden field: API key for the embedded Directions iframe *@
+<input type="hidden" id="google-maps-api-key" value="@Configuration["GoogleMaps:ApiKey"]" />
 
 <div class="container my-5">
     <!-- Back Button -->
@@ -106,54 +111,42 @@
                             <p class="mb-0 fs-6">@Model.Address</p>
                         </div>
 
-                        <div class="col-md-6">
-                            <h6 class="text-uppercase text-muted fw-bold mb-2"><i class="fas fa-phone text-accent"></i> Contacto</h6>
-                            @if (!string.IsNullOrEmpty(Model.FormattedPhoneNumber))
-                            {
+                        @if (!string.IsNullOrEmpty(Model.FormattedPhoneNumber))
+                        {
+                            <div class="col-md-6">
+                                <h6 class="text-uppercase text-muted fw-bold mb-2"><i class="fas fa-phone text-accent"></i> Contacto</h6>
                                 <p class="mb-0 fs-6">
                                     <a href="tel:@(Model.InternationalPhoneNumber ?? Model.FormattedPhoneNumber)" class="text-decoration-none">
                                         @Model.FormattedPhoneNumber
                                     </a>
                                 </p>
-                            }
-                            else
-                            {
-                                <p class="mb-0 fs-6 text-muted">Não disponível</p>
-                            }
-                        </div>
+                            </div>
+                        }
 
-                        <div class="col-md-6">
-                            <h6 class="text-uppercase text-muted fw-bold mb-2"><i class="fas fa-globe text-accent"></i> Website</h6>
-                            @if (!string.IsNullOrEmpty(Model.Website))
-                            {
+                        @if (!string.IsNullOrEmpty(Model.Website))
+                        {
+                            <div class="col-md-6">
+                                <h6 class="text-uppercase text-muted fw-bold mb-2"><i class="fas fa-globe text-accent"></i> Website</h6>
                                 <p class="mb-0 fs-6">
                                     <a href="@Model.Website" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
                                         Visitar Website <i class="fas fa-external-link-alt ms-1 small"></i>
                                     </a>
                                 </p>
-                            }
-                            else
-                            {
-                                <p class="mb-0 fs-6 text-muted">Não disponível</p>
-                            }
-                        </div>
+                            </div>
+                        }
 
-                        <div class="col-md-6">
-                            <h6 class="text-uppercase text-muted fw-bold mb-2"><i class="fas fa-clock text-accent"></i> Horário</h6>
-                            @if (Model.WeekdayText != null && Model.WeekdayText.Any())
-                            {
+                        @if (Model.WeekdayText != null && Model.WeekdayText.Any())
+                        {
+                            <div class="col-md-6">
+                                <h6 class="text-uppercase text-muted fw-bold mb-2"><i class="fas fa-clock text-accent"></i> Horário</h6>
                                 <ul class="list-unstyled mb-0 fs-6">
                                     @foreach (var day in Model.WeekdayText)
                                     {
                                         <li class="mb-1">@day</li>
                                     }
                                 </ul>
-                            }
-                            else
-                            {
-                                <p class="mb-0 fs-6 text-muted">Não disponível</p>
-                            }
-                        </div>
+                            </div>
+                        }
                     </div>
 
                     <div class="d-grid gap-2 d-md-flex mt-auto">
@@ -161,13 +154,11 @@
                            class="btn btn-primary btn-lg flex-fill rounded-pill shadow-sm">
                             <i class="fas fa-calendar-plus me-2"></i> Fazer Reserva
                         </a>
-                        @if (!string.IsNullOrEmpty(Model.GoogleMapsUrl))
-                        {
-                            <a href="@Model.GoogleMapsUrl" target="_blank" rel="noopener noreferrer" 
-                               class="btn btn-outline-secondary btn-lg flex-fill rounded-pill shadow-sm">
-                                <i class="fas fa-directions me-2"></i> Como Chegar
-                            </a>
-                        }
+                        <button type="button" id="btn-details-directions"
+                                class="btn btn-outline-secondary btn-lg flex-fill rounded-pill shadow-sm"
+                                onclick="toggleDetailsDirections()">
+                            <i class="fas fa-route me-2"></i> Como Chegar
+                        </button>
                     </div>
                 </div>
             </div>
@@ -177,8 +168,45 @@
     <!-- Map Section -->
     <div class="row mt-5">
         <div class="col-12">
-            <h3 class="mb-4 fw-bold"><i class="fas fa-map-marked-alt text-accent me-2"></i> Mapa</h3>
+            <h3 class="mb-4 fw-bold"><i class="fas fa-map-marked-alt text-accent me-2"></i> Localização no Mapa</h3>
             <div id="map" class="shadow-sm border" style="height: 400px; width: 100%; border-radius: 12px; z-index: 1;"></div>
+        </div>
+    </div>
+
+    <!-- Embedded Directions Section -->
+    <div id="details-directions-section" class="row mt-4" style="display:none !important;">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-radius:1rem; overflow:hidden;">
+                <div class="card-header d-flex align-items-center justify-content-between py-3 px-4"
+                     style="background:linear-gradient(135deg,#0d1b3e,#1a2a5c); border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <span class="fw-semibold" style="color:#e2e8f0;">
+                        <i class="fas fa-route me-2" style="color:#4f7cf0;"></i>Rota até @Model.Name
+                    </span>
+                    <button type="button" class="btn btn-sm" style="color:#94a3b8;"
+                            onclick="toggleDetailsDirections()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="details-directions-loading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted small">A calcular rota...</p>
+                </div>
+                <div id="details-geo-error" class="d-none px-4 pt-3">
+                    <div class="alert alert-warning py-2 small">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        Localização não disponível. A mostrar destino no mapa.
+                    </div>
+                </div>
+                <iframe id="details-directions-iframe"
+                        src=""
+                        width="100%"
+                        height="420"
+                        style="border:0; display:none;"
+                        allowfullscreen
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"
+                        aria-label="Mapa de rota até @Model.Name"></iframe>
+            </div>
         </div>
     </div>
 
@@ -234,13 +262,7 @@
     <div class="row mt-5 mb-5">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h3 class="fw-bold mb-0"><i class="fas fa-comments text-accent me-2"></i> Comentários Google Maps</h3>
-                @if (!string.IsNullOrEmpty(Model.GoogleMapsUrl))
-                {
-                    <a href="@Model.GoogleMapsUrl" target="_blank" rel="noopener noreferrer" class="btn btn-outline-danger rounded-pill">
-                        <i class="fab fa-google me-1"></i> Ver no Google
-                    </a>
-                }
+                <h3 class="fw-bold mb-0"><i class="fas fa-comments text-accent me-2"></i> Comentários</h3>
             </div>
 
             @if (Model.Reviews != null && Model.Reviews.Any())
@@ -298,8 +320,8 @@
                         <div class="text-muted mb-3">
                             <i class="fas fa-comment-slash fa-3x"></i>
                         </div>
-                        <h5 class="fw-bold">Nenhum comentário encontrado</h5>
-                        <p class="text-secondary mb-0">Ainda não existem comentários no Google Maps para esta localização.</p>
+                        <h5 class="fw-bold">Ainda sem avaliações disponíveis</h5>
+                        <p class="text-secondary mb-0">Nenhuma avaliação foi encontrada para esta localização.</p>
                     </div>
                 </div>
             }
@@ -309,6 +331,7 @@
 
 @section Scripts {
     <script>
+        // ── Details page map (Google Maps JS) ──────────────────────────────
         function initMap() {
             var lat = @Model.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var lng = @Model.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -328,6 +351,70 @@
                 document.getElementById('map').innerHTML = '<div class="d-flex justify-content-center align-items-center h-100 bg-light text-muted">Localização indisponível</div>';
             }
         }
+
+        // ── Embedded in-page Directions ────────────────────────────────────
+        // Builds a Google Maps Embed Directions iframe — user stays on BarberLoc.
+        var _detailsDirectionsOpen = false;
+        var _detailsDestination    = '@Html.Raw(Model.Address?.Replace("'", "\\'") ?? Model.Name.Replace("'", "\\'"))';
+        var _detailsApiKey         = document.getElementById('google-maps-api-key')?.value || '';
+
+        function toggleDetailsDirections() {
+            var section  = document.getElementById('details-directions-section');
+            var iframe   = document.getElementById('details-directions-iframe');
+            var loading  = document.getElementById('details-directions-loading');
+            var geoErr   = document.getElementById('details-geo-error');
+            var btn      = document.getElementById('btn-details-directions');
+
+            _detailsDirectionsOpen = !_detailsDirectionsOpen;
+
+            if (!_detailsDirectionsOpen) {
+                section.style.display = 'none';
+                iframe.style.display  = 'none';
+                iframe.src = '';
+                return;
+            }
+
+            // Show the section
+            section.style.removeProperty('display');
+            if (loading) loading.style.display = 'block';
+            if (geoErr)  geoErr.classList.add('d-none');
+            iframe.style.display = 'none';
+
+            function buildEmbedUrl(originParam) {
+                var base = 'https://www.google.com/maps/embed/v1/';
+                var url = '';
+                if (originParam) {
+                    url = base + 'directions?destination=' + encodeURIComponent(_detailsDestination) + '&mode=walking&origin=' + encodeURIComponent(originParam);
+                } else {
+                    url = base + 'place?q=' + encodeURIComponent(_detailsDestination);
+                }
+                if (_detailsApiKey) url += '&key=' + encodeURIComponent(_detailsApiKey);
+                return url;
+            }
+
+            function showIframe(src) {
+                iframe.src = src;
+                iframe.style.display = 'block';
+                if (loading) loading.style.display = 'none';
+            }
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        var origin = pos.coords.latitude + ',' + pos.coords.longitude;
+                        showIframe(buildEmbedUrl(origin));
+                    },
+                    function() {
+                        if (geoErr) geoErr.classList.remove('d-none');
+                        showIframe(buildEmbedUrl(null));
+                    },
+                    { timeout: 6000, maximumAge: 60000 }
+                );
+            } else {
+                if (geoErr) geoErr.classList.remove('d-none');
+                showIframe(buildEmbedUrl(null));
+            }
+        }
     </script>
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=@Model.GoogleApiKey&callback=initMap"></script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=@Configuration["GoogleMaps:ApiKey"]&callback=initMap"></script>
 }

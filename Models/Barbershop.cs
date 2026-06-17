@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace WebApplication1.Models
 {
@@ -26,6 +27,12 @@ namespace WebApplication1.Models
         [Required]
         [StringLength(100)]
         public string GooglePlaceId { get; set; } = string.Empty;
+
+        [NotMapped]
+        public double? Rating { get; set; }
+
+        [NotMapped]
+        public int? UserRatingsTotal { get; set; }
 
         // Existing legacy PlaceId property retained for compatibility with older code.
         public string? PlaceId { get; set; }

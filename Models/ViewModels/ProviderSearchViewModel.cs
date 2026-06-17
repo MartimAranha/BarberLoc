@@ -15,18 +15,14 @@ namespace WebApplication1.Models.ViewModels
         public string? SearchQuery { get; set; }
 
         /// <summary>
-        /// Comma-separated category filter: "Barbershop", "HairSalon", "Unisex".
-        /// Empty means all categories.
+        /// Service/Gender filter: "Todos", "Barbearia", "Cabeleireiro".
         /// </summary>
-        [Display(Name = "Categoria")]
-        public List<string> SelectedCategories { get; set; } = new();
+        [Display(Name = "Serviço / Género")]
+        public string ServiceGender { get; set; } = "Todos";
 
-        /// <summary>
-        /// Gender filter: "Male", "Female", "Unisex".
-        /// Empty means all genders.
-        /// </summary>
-        [Display(Name = "Género")]
-        public List<string> SelectedGenders { get; set; } = new();
+        /// <summary>Search radius in kilometers (e.g. 2, 5, 10, 20).</summary>
+        [Display(Name = "Distância")]
+        public int RadiusInKm { get; set; } = 15;
 
         /// <summary>If true, only show providers that offer at least one mobile/home service.</summary>
         [Display(Name = "Apenas ao Domicílio")]

@@ -67,7 +67,7 @@ window.initMap = function () {
     };
 
     map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 12,
+        zoom: 13,
         center: defaultCenter,
         mapTypeControl: false,
         fullscreenControl: true,
@@ -75,6 +75,7 @@ window.initMap = function () {
         // FIX 3: Disable all clickable POI icons — prevents native Google Maps
         // info windows from opening when the user clicks anywhere on the map.
         clickableIcons: false,
+        mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement to render!
         styles: [
             { featureType: 'poi', stylers: [{ visibility: 'off' }] },
             { featureType: 'transit', stylers: [{ visibility: 'simplified' }] }
@@ -84,6 +85,30 @@ window.initMap = function () {
     // FIX 3: Absorb any stray map-level click events so Google's default popup
     // handler never fires — our marker listeners take priority.
     google.maps.event.addListener(map, 'click', () => { /* intentionally empty */ });
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            const userPos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+
+            // Create the pulsing blue dot element
+            const pinElement = document.createElement('div');
+            pinElement.className = 'user-location-marker';
+            pinElement.innerHTML = '<div class="blue-dot"></div><div class="blue-dot-pulse"></div>';
+
+            // Use the modern AdvancedMarkerElement required by Google Maps in 2026
+            const userMarker = new google.maps.marker.AdvancedMarkerElement({
+                map: map,
+                position: userPos,
+                content: pinElement,
+                title: "A sua localização"
+            });
+        }, function() {
+            // Handle geolocation denial gracefully - do nothing so map doesn't crash
+        });
+    }
 
     // If offcanvas wasn't ready at DOMContentLoaded (rare), lazy-init it now.
     if (!offcanvasInstance) {
@@ -333,11 +358,20 @@ function populatePanel(d) {
     // Reviews
     renderReviews(d.reviews || []);
 
-    // Google Maps CTA button (user-initiated redirect, not automatic)
-    const mapsBtn = el('btn-google-maps');
-    if (mapsBtn) {
-        mapsBtn.href = d.googleMapsUrl
-            || `https://maps.google.com/?q=${encodeURIComponent(d.name || currentPlaceId || '')}`;
+    // Directions button — show it and store destination on data attribute
+    const directionsBtn = el('btn-directions');
+    if (directionsBtn) {
+        directionsBtn.classList.remove('d-none');
+        directionsBtn.dataset.destination = d.formattedAddress || d.name || '';
+        directionsBtn.dataset.lat = (d.lat ?? d.latitude ?? '') + '';
+        directionsBtn.dataset.lng = (d.lng ?? d.longitude ?? '') + '';
+    }
+    // Collapse any previously open directions panel
+    el('directions-embed-container')?.classList.add('d-none');
+    const existingIframe = el('directions-iframe');
+    if (existingIframe) {
+        existingIframe.style.display = 'none';
+        existingIframe.src = '';
     }
 
     // Favourite button
@@ -369,9 +403,18 @@ function fillBasicPanelFromMarker(place) {
     const rh = el('reviews-heading-text');
     if (rh) rh.textContent = 'Avaliações Google';
 
-    const mapsBtn = el('btn-google-maps');
-    if (mapsBtn) {
-        mapsBtn.href = `https://maps.google.com/?q=${encodeURIComponent(place.name || '')}`;
+    const directionsBtn2 = el('btn-directions');
+    if (directionsBtn2) {
+        directionsBtn2.classList.remove('d-none');
+        directionsBtn2.dataset.destination = place.address || place.name || '';
+        directionsBtn2.dataset.lat = (place.lat ?? '') + '';
+        directionsBtn2.dataset.lng = (place.lng ?? '') + '';
+    }
+    el('directions-embed-container')?.classList.add('d-none');
+    const existingIframe2 = el('directions-iframe');
+    if (existingIframe2) {
+        existingIframe2.style.display = 'none';
+        existingIframe2.src = '';
     }
 }
 
@@ -422,7 +465,13 @@ function renderReviews(reviews) {
     const list    = el('panel-reviews-list');
 
     if (!reviews || reviews.length === 0) {
-        section.classList.add('d-none');
+        section.classList.remove('d-none');
+        list.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-comment-slash fa-2x text-muted mb-2"></i>
+                <p class="text-muted small mb-0">Ainda sem avaliações disponíveis</p>
+            </div>
+        `;
         return;
     }
 
@@ -607,9 +656,32 @@ function setupFilterPanel() {
 // ── Apply client-side filters ─────────────────────────────────────────────────
 function applyFilters() {
     const filtered = allPlaces.filter(p => {
-        if (activeFilters.category  && p.category !== activeFilters.category)     return false;
-        if (activeFilters.minRating && p.rating    <  parseFloat(activeFilters.minRating)) return false;
-        if (activeFilters.mobileOnly && !p.hasMobile)                              return false;
+        if (activeFilters.minRating && p.rating < parseFloat(activeFilters.minRating)) return false;
+        if (activeFilters.mobileOnly && !p.hasMobile) return false;
+
+        if (activeFilters.category) {
+            const lowerName = (p.name || '').toLowerCase();
+            const category = p.category || '';
+            
+            if (activeFilters.category === 'Barbershop') {
+                const isBarber = category === 'Barbershop' || 
+                               lowerName.includes('barbearia') || 
+                               lowerName.includes('barber') || 
+                               lowerName.includes('dom') || 
+                               lowerName.includes('men');
+                if (!isBarber) return false;
+            } else if (activeFilters.category === 'HairSalon') {
+                const isSalon = category === 'HairSalon' || 
+                              lowerName.includes('cabeleireiro') || 
+                              lowerName.includes('salon') || 
+                              lowerName.includes('studio') || 
+                              lowerName.includes('beauty') || 
+                              lowerName.includes('feminino');
+                if (!isSalon) return false;
+            } else if (activeFilters.category === 'Unisex') {
+                if (category !== 'Unisex') return false;
+            }
+        }
         return true;
     });
 
@@ -645,3 +717,71 @@ function escHtml(str) {
         .replace(/"/g,  '&quot;')
         .replace(/'/g,  '&#039;');
 }
+
+// ── Embedded Directions Toggle ────────────────────────────────────────────────
+// Called by the "Como Chegar" button in _PlaceDetailPanel.
+// Uses the browser Geolocation API for origin, then builds a Google Maps Embed
+// Directions URL — the user never leaves BarberLoc.
+window.toggleDirectionsPanel = function () {
+    const container = el('directions-embed-container');
+    const iframe    = el('directions-iframe');
+    const loadingEl = el('directions-loading');
+    const geoError  = el('directions-geo-error');
+    const btn       = el('btn-directions');
+    if (!container || !iframe || !btn) return;
+
+    const isOpen = !container.classList.contains('d-none');
+    if (isOpen) {
+        // Collapse
+        container.classList.add('d-none');
+        iframe.style.display = 'none';
+        iframe.src = '';
+        return;
+    }
+
+    // Expand and load
+    container.classList.remove('d-none');
+    if (loadingEl) loadingEl.classList.remove('d-none');
+    if (geoError)  geoError.classList.add('d-none');
+    iframe.style.display = 'none';
+
+    const destination = btn.dataset.destination || '';
+    // Read the API key injected by the server (hidden input rendered by the layout/panel)
+    const apiKey = document.getElementById('google-maps-api-key-panel')?.value || document.getElementById('google-maps-api-key')?.value || '';
+
+    function buildEmbedUrl(originParam) {
+        const base = 'https://www.google.com/maps/embed/v1/';
+        let url = '';
+        if (originParam) {
+            url = `${base}directions?destination=${encodeURIComponent(destination)}&mode=walking&origin=${encodeURIComponent(originParam)}`;
+        } else {
+            url = `${base}place?q=${encodeURIComponent(destination)}`;
+        }
+        if (apiKey) url += `&key=${encodeURIComponent(apiKey)}`;
+        return url;
+    }
+
+    function showIframe(src) {
+        iframe.src = src;
+        iframe.style.display = 'block';
+        if (loadingEl) loadingEl.classList.add('d-none');
+    }
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                const origin = pos.coords.latitude + ',' + pos.coords.longitude;
+                showIframe(buildEmbedUrl(origin));
+            },
+            function () {
+                // Geolocation denied or unavailable — show map centred on destination
+                if (geoError) geoError.classList.remove('d-none');
+                showIframe(buildEmbedUrl(null));
+            },
+            { timeout: 6000, maximumAge: 60000 }
+        );
+    } else {
+        if (geoError) geoError.classList.remove('d-none');
+        showIframe(buildEmbedUrl(null));
+    }
+};

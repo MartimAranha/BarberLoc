@@ -126,8 +126,9 @@
                 map.fitBounds(bounds);
             });
 
-            // Refresh live results when the map stops moving
-            map.addListener("idle", fetchLiveResults);
+            // Fetch live results when the user physically moves or zooms the map
+            map.addListener("dragend", fetchLiveResults);
+            map.addListener("zoom_changed", fetchLiveResults);
 
             // Locate button
             document.getElementById("locateBtn").addEventListener("click", () => {
@@ -140,6 +141,7 @@
                             };
                             map.setCenter(pos);
                             map.setZoom(15);
+                            fetchLiveResults();
                         },
                         () => {
                             alert("Não foi possível obter a sua localização.");
@@ -157,12 +159,31 @@
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
                     });
+                    fetchLiveResults();
                 });
             }
         }
 
+        let isMapFetching = false;
+        let lastFetchCenter = null;
+
         async function fetchLiveResults() {
+            if (isMapFetching) return;
+
             const center = map.getCenter();
+            
+            // Break infinite loop: only fetch if map moved significantly
+            if (lastFetchCenter) {
+                const latDiff = Math.abs(center.lat() - lastFetchCenter.lat());
+                const lngDiff = Math.abs(center.lng() - lastFetchCenter.lng());
+                if (latDiff < 0.0001 && lngDiff < 0.0001) {
+                    return;
+                }
+            }
+            lastFetchCenter = center;
+
+            isMapFetching = true;
+            
             // Estimate radius based on zoom level (rough approximation)
             const zoom = map.getZoom();
             const radius = Math.floor(40000 / Math.pow(2, zoom - 10)); // e.g., zoom 14 -> ~2500m
@@ -188,6 +209,7 @@
                 }
             } finally {
                 if (loadingSpinner != null) loadingSpinner.classList.add("d-none");
+                isMapFetching = false;
             }
         }
 

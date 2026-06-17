@@ -1,5 +1,6 @@
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
 @model WebApplication1.Models.ViewModels.PlaceDetailsViewModel
-
 @{
     ViewData["Title"] = Model.Name;
     
@@ -118,43 +119,22 @@
                 </div>
             </div>
 
-            @* Photos Gallery *@
-            @if (Model.Photos.Count > 1)
-            {
-                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-                    <div class="card-body p-4 pb-0">
-                        <h2 class="h5 fw-bold mb-3">
-                            <i class="fas fa-camera text-primary me-2"></i> Galeria de Fotos
-                        </h2>
-                    </div>
-                    
-                    <div id="placePhotosCarousel" class="carousel slide" data-bs-ride="carousel">
-                        <div class="carousel-inner">
-                            @for (int i = 0; i < Model.Photos.Count; i++)
-                            {
-                                var photo = Model.Photos[i];
-                                <div class="carousel-item @(i == 0 ? "active" : "")">
-                                    <img src="https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=@photo.PhotoReference&key=@(ViewBag.GoogleMapsApiKey ?? "")" class="d-block w-100" style="height: 350px; object-fit: cover;" alt="Foto de @Model.Name">
-                                </div>
-                            }
-                        </div>
-                        <button class="carousel-control-prev" type="button" data-bs-target="#placePhotosCarousel" data-bs-slide="prev">
-                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                            <span class="visually-hidden">Anterior</span>
-                        </button>
-                        <button class="carousel-control-next" type="button" data-bs-target="#placePhotosCarousel" data-bs-slide="next">
-                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                            <span class="visually-hidden">Seguinte</span>
-                        </button>
-                    </div>
-                </div>
-            }
-
             @* Map *@
-            @if (Model.Lat.HasValue && Model.Lng.HasValue)
+            @if (!string.IsNullOrEmpty(Model.FormattedAddress) || !string.IsNullOrEmpty(Model.Name))
             {
-                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-                    <div id="detailsMap" style="height: 300px; width: 100%;"></div>
+                <div class="card border-0 shadow-sm rounded-4 mb-4 p-4">
+                    <h2 class="h5 fw-bold mb-4">
+                        <i class="fas fa-map-marked-alt text-primary me-2"></i> Localização
+                    </h2>
+                    <div class="rounded-4 overflow-hidden" style="height: 350px;">
+                        <iframe 
+                            class="w-100 h-100 border-0" 
+                            loading="lazy" 
+                            allowfullscreen 
+                            referrerpolicy="no-referrer-when-downgrade" 
+                            src="https://www.google.com/maps/embed/v1/place?q=@System.Net.WebUtility.UrlEncode(Model.FormattedAddress ?? Model.Name)&key=@Configuration["GoogleMaps:ApiKey"]">
+                        </iframe>
+                    </div>
                 </div>
             }
         </div>
@@ -239,9 +219,6 @@
 </div>
 
 @section Scripts {
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
     <style>
         .provider-details-hero {
             min-height: 400px;
@@ -299,24 +276,4 @@
             border: 1px solid #f1f3f5;
         }
     </style>
-
-    @if (Model.Lat.HasValue && Model.Lng.HasValue)
-    {
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                var lat = @Model.Lat.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                var lng = @Model.Lng.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-                var map = L.map('detailsMap').setView([lat, lng], 16);
-                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                }).addTo(map);
-                
-                L.marker([lat, lng]).addTo(map)
-                    .bindPopup('<b>@Html.Raw(Model.Name.Replace("'", "\\'"))</b>')
-                    .openPopup();
-            });
-        </script>
-    }
 }

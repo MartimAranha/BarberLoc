@@ -41,7 +41,7 @@ namespace WebApplication1.Controllers
             // Default search fallback using Lisbon coordinates
             double lat = 38.7223;
             double lng = -9.1393;
-            int radius = 15000; // 15km default radius
+            int radius = (vm.RadiusInKm > 0 ? vm.RadiusInKm : 15) * 1000;
 
             var searchQuery = string.IsNullOrWhiteSpace(vm.SearchQuery) ? "Barbearia" : vm.SearchQuery;
 
@@ -58,14 +58,47 @@ namespace WebApplication1.Controllers
                 Longitude = r.Lng,
                 ImageUrl = r.PhotoUrl, // Mapped to the proxy photo URL
                 Category = InferCategory(r.Category),
+                Rating = r.Rating,
+                UserRatingsTotal = r.UserRatingsTotal,
                 Services = new List<Service>() // Real services would require the DB
-            }).ToList();
+            }).AsEnumerable();
+
+            // ── Filter ────────────────────────────────────────────────────────
+            if (vm.MinRating.HasValue)
+            {
+                mappedResults = mappedResults.Where(r => r.Rating >= vm.MinRating.Value);
+            }
+
+            if (!string.IsNullOrEmpty(vm.ServiceGender) && vm.ServiceGender != "Todos")
+            {
+                if (vm.ServiceGender == "Barbearia")
+                {
+                    mappedResults = mappedResults.Where(r => 
+                        r.Category == BarbershopCategory.Barbershop || 
+                        r.Name.Contains("Barbearia", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Barber", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Dom", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Men", StringComparison.OrdinalIgnoreCase));
+                }
+                else if (vm.ServiceGender == "Cabeleireiro")
+                {
+                    mappedResults = mappedResults.Where(r => 
+                        r.Category == BarbershopCategory.HairSalon || 
+                        r.Name.Contains("Cabeleireiro", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Salon", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Studio", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Beauty", StringComparison.OrdinalIgnoreCase) ||
+                        r.Name.Contains("Feminino", StringComparison.OrdinalIgnoreCase));
+                }
+            }
 
             // ── Sort ──────────────────────────────────────────────────────────
             var allResults = vm.SortBy switch
             {
                 "name" => mappedResults.OrderBy(b => b.Name).ToList(),
-                _ => mappedResults.OrderBy(b => b.Name).ToList() // default: name
+                "rating" => mappedResults.OrderByDescending(b => b.Rating ?? 0).ToList(),
+                "newest" => mappedResults.OrderByDescending(b => b.CreatedAt).ToList(),
+                _ => mappedResults.OrderByDescending(b => b.Rating ?? 0).ToList() // default: rating
             };
 
             vm.Results = allResults;

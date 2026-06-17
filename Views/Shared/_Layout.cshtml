@@ -73,29 +73,130 @@
     </div>
 
     <footer class="footer">
+        <style>
+            .footer {
+                background: linear-gradient(160deg, #0d1117 0%, #0a0f1e 100%);
+                border-top: 1px solid rgba(255,255,255,0.07);
+                color: rgba(224,231,255,0.65);
+                font-family: 'Outfit', system-ui, sans-serif;
+            }
+            .footer h5, .footer h6 {
+                color: #e2e8f0;
+                font-weight: 700;
+                margin-bottom: 1rem;
+            }
+            .footer a {
+                color: rgba(224,231,255,0.55);
+                text-decoration: none;
+                transition: color 0.18s;
+            }
+            .footer a:hover { color: #4f7cf0; }
+            .footer .footer-divider {
+                border-color: rgba(255,255,255,0.07);
+            }
+            .footer-contact-item {
+                display: flex;
+                align-items: center;
+                gap: 0.65rem;
+                padding: 0.55rem 0.75rem;
+                border-radius: 0.6rem;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(255,255,255,0.07);
+                margin-bottom: 0.5rem;
+                transition: background 0.18s, border-color 0.18s;
+            }
+            .footer-contact-item:hover {
+                background: rgba(79,124,240,0.1);
+                border-color: rgba(79,124,240,0.25);
+            }
+            .footer-contact-item i {
+                color: #4f7cf0;
+                font-size: 0.85rem;
+                flex-shrink: 0;
+                width: 16px;
+                text-align: center;
+            }
+            .footer-contact-item a,
+            .footer-contact-item span {
+                font-size: 0.85rem;
+                color: rgba(224,231,255,0.65);
+            }
+            .footer-contact-item a:hover { color: #4f7cf0; }
+            .footer-bottom-text {
+                font-size: 0.8rem;
+                color: rgba(224,231,255,0.3);
+            }
+            .footer-brand-accent {
+                background: linear-gradient(90deg, #4f7cf0, #0ca678);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+        </style>
         <div class="container">
-            <div class="row py-4">
+            <div class="row py-5 gy-4">
                 <div class="col-md-4">
-                    <h5><i class="fas fa-cut"></i> BarberLoc</h5>
-                    <p class="text-muted">Encontre as melhores barbearias perto de você. Rápido, prático e conveniente.</p>
+                    <h5>
+                        <i class="fas fa-cut me-2" style="color:#4f7cf0;"></i>
+                        <span class="footer-brand-accent">BarberLoc</span>
+                    </h5>
+                    <p style="font-size:0.875rem; line-height:1.7;">
+                        A plataforma portuguesa que liga clientes às melhores
+                        barbearias e salões. Rápido, prático e sem complicações.
+                    </p>
+
                 </div>
                 <div class="col-md-4">
-                    <h6>Links Úteis</h6>
-                    <ul class="list-unstyled">
-                        <li><a asp-controller="Home" asp-action="Index">Início</a></li>
-                        <!-- Barbearias link removed per request -->
-                        <li><a asp-controller="Home" asp-action="Privacy">Privacidade</a></li>
+                    <h6>Navegação</h6>
+                    <ul class="list-unstyled" style="font-size:0.875rem;">
+                        <li class="mb-2">
+                            <a asp-controller="Home" asp-action="Index">
+                                <i class="fas fa-home me-2" style="color:#4f7cf0;width:14px;"></i>Início
+                            </a>
+                        </li>
+                        <li class="mb-2">
+                            <a asp-controller="Map" asp-action="Index">
+                                <i class="fas fa-map-location-dot me-2" style="color:#4f7cf0;width:14px;"></i>Mapa Interativo
+                            </a>
+                        </li>
+                        <li class="mb-2">
+                            <a asp-controller="Provider" asp-action="Index">
+                                <i class="fas fa-search me-2" style="color:#4f7cf0;width:14px;"></i>Explorar
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="Home" asp-action="Privacy">
+                                <i class="fas fa-shield-halved me-2" style="color:#4f7cf0;width:14px;"></i>Privacidade
+                            </a>
+                        </li>
                     </ul>
                 </div>
                 <div class="col-md-4">
-                    <h6>Contacto</h6>
-                    <p class="text-muted mb-1"><i class="fas fa-envelope"></i> info@barberloc.pt</p>
-                    <p class="text-muted"><i class="fas fa-phone"></i> +351 123 456 789</p>
+                    <div class="p-4 rounded-4" style="background: linear-gradient(145deg, rgba(20,25,40,0.8) 0%, rgba(10,15,30,0.9) 100%); border: 1px solid rgba(79, 124, 240, 0.2); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                        <h6 class="mb-4 text-white d-flex align-items-center gap-2">
+                            <i class="fas fa-headset text-primary"></i> Contactos
+                        </h6>
+                        <div class="footer-contact-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05);">
+                            <i class="fas fa-envelope text-primary"></i>
+                            <a href="mailto:info@barberloc.pt" class="text-decoration-none">info@barberloc.pt</a>
+                        </div>
+                        <div class="footer-contact-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05);">
+                            <i class="fas fa-phone text-primary"></i>
+                            <a href="tel:+351123456789" class="text-decoration-none">+351 123 456 789</a>
+                        </div>
+                        <div class="footer-contact-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05);">
+                            <i class="fas fa-location-dot text-primary"></i>
+                            <span>Lisboa, Portugal</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="text-center border-top pt-3">
-                <p class="text-muted mb-0">&copy; 2026 - BarberLoc - Todos os direitos reservados</p>
-                <p class="text-muted small">Contribuindo para o ODS 8 - Trabalho Digno e Crescimento Económico</p>
+            <div class="text-center border-top footer-divider pt-4 pb-3">
+                <p class="footer-bottom-text mb-1">&copy; 2026 BarberLoc — Todos os direitos reservados</p>
+                <p class="footer-bottom-text mb-0">
+                    <i class="fas fa-leaf me-1" style="color:#0ca678;"></i>
+                    Contribuindo para o ODS 8 — Trabalho Digno e Crescimento Económico
+                </p>
             </div>
         </div>
     </footer>

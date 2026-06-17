@@ -569,8 +569,10 @@ namespace WebApplication1.Services
                 _logger.LogInformation("[GooglePlacesService] Using fallback location: Lisbon (38.7223, -9.1393)");
             }
 
-            // If query is null or empty, default to "Barbearia" as per requirements
-            var searchQuery = string.IsNullOrWhiteSpace(query) ? "Barbearia" : query;
+            // Expand query to include hairdressers and salons as requested by user
+            var searchQuery = string.IsNullOrWhiteSpace(query) || query.Equals("Barbearia", StringComparison.OrdinalIgnoreCase) 
+                ? "barbearia, cabeleireiro, salão de beleza" 
+                : query;
 
             // Clamp radius to the API maximum
             radiusInMeters = Math.Clamp(radiusInMeters, 100, 50_000);
@@ -592,89 +594,115 @@ namespace WebApplication1.Services
             var latStr = lat.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var lngStr = lng.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-            var url = "https://maps.googleapis.com/maps/api/place/textsearch/json" +
+            var initialUrl = "https://maps.googleapis.com/maps/api/place/textsearch/json" +
                       $"?query={Uri.EscapeDataString(searchQuery)}" +
                       $"&location={latStr},{lngStr}" +
                       $"&radius={radiusInMeters}" +
                       "&language=pt" +
                       $"&key={apiKey}";
 
-            var maskedUrl = url.Replace(apiKey, "HIDDEN_API_KEY");
-            _logger.LogInformation("[GooglePlacesService] Calling Google API. URL: {Url}", maskedUrl);
-
-            _httpClient.Timeout = TimeSpan.FromSeconds(15);
-            var response = await _httpClient.GetAsync(url);
-            
-            _logger.LogInformation("[GooglePlacesService] HTTP Status Code: {StatusCode}", response.StatusCode);
-
-            var json = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("[GooglePlacesService] Raw JSON Response BEFORE parsing:\n{Json}", json);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogCritical("[GooglePlacesService] HTTP request failed with status {StatusCode}. Response: {Json}", response.StatusCode, json);
-                throw new Exception($"Google API HTTP request failed with status {response.StatusCode}.");
-            }
-
+            _httpClient.Timeout = TimeSpan.FromSeconds(30); // increased timeout for multiple pages
             var results = new List<Models.ViewModels.BarberShopPlaceViewModel>();
+            string? nextPageToken = null;
 
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            var status = root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() : "UNKNOWN";
-
-            if (status != "OK" && status != "ZERO_RESULTS")
+            for (int page = 0; page < 3; page++) // Max 3 pages (up to 60 results)
             {
-                var errorMsg = root.TryGetProperty("error_message", out var errEl) ? errEl.GetString() : "No error_message provided";
-                _logger.LogCritical("[GooglePlacesService] Google API returned invalid status {Status}. Error Message: {ErrorMessage}", status, errorMsg);
-                throw new Exception($"Google API returned invalid status: {status}. Message: {errorMsg}");
-            }
-
-            if (status == "OK" && root.TryGetProperty("results", out var items))
-            {
-                foreach (var item in items.EnumerateArray())
+                var url = initialUrl;
+                if (!string.IsNullOrEmpty(nextPageToken))
                 {
-                    var placeId = item.TryGetProperty("place_id", out var pid) ? pid.GetString() ?? string.Empty : string.Empty;
-                    if (string.IsNullOrEmpty(placeId)) continue;
+                    // Delay required by Google API before nextPageToken is valid
+                    await Task.Delay(2000);
+                    url = $"https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken={nextPageToken}&key={apiKey}";
+                }
 
-                    double? itemLat = null, itemLng = null;
-                    if (item.TryGetProperty("geometry", out var geo) &&
-                        geo.TryGetProperty("location", out var loc))
+                var maskedUrl = url.Replace(apiKey, "HIDDEN_API_KEY");
+                _logger.LogInformation("[GooglePlacesService] Calling Google API Page {Page}. URL: {Url}", page + 1, maskedUrl);
+
+                var response = await _httpClient.GetAsync(url);
+                _logger.LogInformation("[GooglePlacesService] HTTP Status Code: {StatusCode}", response.StatusCode);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorJson = await response.Content.ReadAsStringAsync();
+                    _logger.LogCritical("[GooglePlacesService] HTTP request failed with status {StatusCode}. Response: {Json}", response.StatusCode, errorJson);
+                    if (page == 0) throw new Exception($"Google API HTTP request failed with status {response.StatusCode}.");
+                    break;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                var status = root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() : "UNKNOWN";
+
+                if (status != "OK" && status != "ZERO_RESULTS")
+                {
+                    // If INVALID_REQUEST occurs on page 2+, it might mean the token wasn't ready yet.
+                    if (status == "INVALID_REQUEST" && page > 0)
                     {
-                        itemLat = loc.TryGetProperty("lat", out var latEl) ? latEl.GetDouble() : null;
-                        itemLng = loc.TryGetProperty("lng", out var lngEl) ? lngEl.GetDouble() : null;
+                        _logger.LogWarning("[GooglePlacesService] Token not ready. Breaking loop.");
+                        break;
                     }
+                    var errorMsg = root.TryGetProperty("error_message", out var errEl) ? errEl.GetString() : "No error_message provided";
+                    _logger.LogCritical("[GooglePlacesService] Google API returned invalid status {Status}. Error Message: {ErrorMessage}", status, errorMsg);
+                    if (page == 0) throw new Exception($"Google API returned invalid status: {status}. Message: {errorMsg}");
+                    break;
+                }
 
-                    if (itemLat == null || itemLng == null) continue;
-
-                    string? photoRef = null;
-                    if (item.TryGetProperty("photos", out var photos) &&
-                        photos.GetArrayLength() > 0 &&
-                        photos[0].TryGetProperty("photo_reference", out var pr))
+                if (status == "OK" && root.TryGetProperty("results", out var items))
+                {
+                    foreach (var item in items.EnumerateArray())
                     {
-                        photoRef = pr.GetString();
+                        var placeId = item.TryGetProperty("place_id", out var pid) ? pid.GetString() ?? string.Empty : string.Empty;
+                        if (string.IsNullOrEmpty(placeId) || results.Any(x => x.PlaceId == placeId)) continue;
+
+                        double? itemLat = null, itemLng = null;
+                        if (item.TryGetProperty("geometry", out var geo) &&
+                            geo.TryGetProperty("location", out var loc))
+                        {
+                            itemLat = loc.TryGetProperty("lat", out var latEl) ? latEl.GetDouble() : null;
+                            itemLng = loc.TryGetProperty("lng", out var lngEl) ? lngEl.GetDouble() : null;
+                        }
+
+                        if (itemLat == null || itemLng == null) continue;
+
+                        string? photoRef = null;
+                        if (item.TryGetProperty("photos", out var photos) &&
+                            photos.GetArrayLength() > 0 &&
+                            photos[0].TryGetProperty("photo_reference", out var pr))
+                        {
+                            photoRef = pr.GetString();
+                        }
+
+                        results.Add(new Models.ViewModels.BarberShopPlaceViewModel
+                        {
+                            PlaceId = placeId,
+                            Name = item.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
+                            Address = item.TryGetProperty("formatted_address", out var fmtAddr) ? fmtAddr.GetString() :
+                                      (item.TryGetProperty("vicinity", out var vic) ? vic.GetString() : null),
+                            Rating = item.TryGetProperty("rating", out var rat) ? rat.GetDouble() : null,
+                            UserRatingsTotal = item.TryGetProperty("user_ratings_total", out var urt) ? urt.GetInt32() : null,
+                            Lat = itemLat.Value,
+                            Lng = itemLng.Value,
+                            PhotoReference = photoRef
+                        });
                     }
+                }
 
-                    results.Add(new Models.ViewModels.BarberShopPlaceViewModel
-                    {
-                        PlaceId = placeId,
-                        Name = item.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
-                        // Text Search usually uses formatted_address, but fallback to vicinity just in case
-                        Address = item.TryGetProperty("formatted_address", out var fmtAddr) ? fmtAddr.GetString() :
-                                  (item.TryGetProperty("vicinity", out var vic) ? vic.GetString() : null),
-                        Rating = item.TryGetProperty("rating", out var rat) ? rat.GetDouble() : null,
-                        UserRatingsTotal = item.TryGetProperty("user_ratings_total", out var urt) ? urt.GetInt32() : null,
-                        Lat = itemLat.Value,
-                        Lng = itemLng.Value,
-                        PhotoReference = photoRef
-                    });
+                if (root.TryGetProperty("next_page_token", out var tokenEl))
+                {
+                    nextPageToken = tokenEl.GetString();
+                }
+                else
+                {
+                    break; // No more pages available
                 }
             }
 
             var resultList = results.OrderByDescending(p => p.Rating ?? 0).ToList();
             _memoryCache.Set(cacheKey, resultList, TimeSpan.FromMinutes(10));
             
-            _logger.LogInformation("[GooglePlacesService] Successfully mapped {Count} places.", resultList.Count);
+            _logger.LogInformation("[GooglePlacesService] Successfully mapped {Count} places across pages.", resultList.Count);
 
             return resultList;
         }

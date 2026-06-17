@@ -487,9 +487,8 @@
                 </h1>
 
                 <p class="bl-hero-sub">
-                    O BarberLoc usa o Google Maps para mostrar barbearias e salões
-                    reais perto de si — com avaliações, horários e fotos actualizadas
-                    em tempo real.
+                    Descubra as melhores barbearias e salões à sua volta — com
+                    avaliações reais, horários actualizados e fotos em tempo real.
                 </p>
 
                 <div class="d-flex flex-wrap gap-3">
@@ -526,17 +525,17 @@
 
                 @* Social proof stats *@
                 <div class="bl-stats" aria-label="Estatísticas da plataforma">
-                    <div>
-                        <div class="bl-stat-val">@(hasApiKey ? "Live" : "Demo")</div>
-                        <div class="bl-stat-label">Modo de dados</div>
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="bl-stat-val text-primary">500+</div>
+                        <div class="bl-stat-label">Barbearias</div>
                     </div>
-                    <div>
-                        <div class="bl-stat-val">Google</div>
-                        <div class="bl-stat-label">Places API</div>
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="bl-stat-val text-warning">★ 4.8</div>
+                        <div class="bl-stat-label">Média</div>
                     </div>
-                    <div>
-                        <div class="bl-stat-val">PT&nbsp;🇵🇹</div>
-                        <div class="bl-stat-label">Mercado</div>
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="bl-stat-val">🇵🇹</div>
+                        <div class="bl-stat-label">Portugal</div>
                     </div>
                 </div>
             </div>
@@ -610,8 +609,7 @@
                     </div>
                     <h3 class="bl-feature-title">Mapa Interativo em Tempo Real</h3>
                     <p class="bl-feature-desc">
-                        Veja barbearias e salões directamente no mapa, actualizados
-                        com dados reais do Google Places sempre que movimenta a vista.
+                        Veja barbearias e salões directamente no mapa com informações em tempo real e de forma simples e intuitiva.
                     </p>
                 </div>
             </div>
@@ -623,9 +621,9 @@
                          style="background:rgba(249,199,79,0.1); color:#f9c74f;">
                         <i class="fas fa-star" aria-hidden="true"></i>
                     </div>
-                    <h3 class="bl-feature-title">Avaliações Google Reais</h3>
+                    <h3 class="bl-feature-title">Avaliações Reais</h3>
                     <p class="bl-feature-desc">
-                        Leia opiniões reais de outros clientes directamente do Google,
+                        Leia opiniões de outros clientes para fazer a escolha certa,
                         com classificações, fotos e horários actualizados.
                     </p>
                 </div>
@@ -719,8 +717,8 @@
                             <div class="bl-step-title">Abra o mapa interativo</div>
                             <p class="bl-step-desc">
                                 Clique em "Começar Agora" e o mapa mostra automaticamente
-                                barbearias e salões à sua volta com dados em tempo real
-                                do Google Places.
+                                barbearias e salões à sua volta com informações
+                                actualizadas em tempo real.
                             </p>
                         </div>
                     </div>
@@ -767,17 +765,10 @@
 <section class="bl-cta-banner" aria-labelledby="cta-title">
     <div class="container text-center position-relative" style="z-index:1;">
         <h2 class="bl-cta-title" id="cta-title">
-            Pronto para encontrar<br>a sua barbearia ideal?
+            Transforme o seu visual<br>hoje mesmo
         </h2>
         <p class="bl-cta-sub">
-            @if (hasApiKey)
-            {
-                @:O mapa está a funcionar em modo ao vivo com dados reais do Google Places.
-            }
-            else
-            {
-                @:Configure a sua chave de API do Google Places para activar dados em tempo real.
-            }
+            Descubra o estilo perfeito para si. Acesso rápido aos melhores profissionais da sua cidade, com reserva imediata.
         </p>
         <a asp-controller="Map" asp-action="Index"
            class="btn-hero-primary"

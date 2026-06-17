@@ -45,76 +45,58 @@
 
                             @* ── Filter Row ── *@
                             <div class="row g-3 align-items-end">
-                                @* Category Pills *@
+                                @* Service/Gender Badges *@
                                 <div class="col-lg-5">
                                     <label class="form-label fw-semibold text-muted small mb-2">
-                                        <i class="fas fa-tag me-1"></i> CATEGORIA
+                                        <i class="fas fa-venus-mars me-1"></i> SERVIÇO / GÉNERO
                                     </label>
                                     <div class="d-flex gap-2 flex-wrap">
                                         @{
-                                            var cats = new[] {
-                                                ("Barbershop", "fas fa-cut", "Barbearia"),
-                                                ("HairSalon", "fas fa-spa", "Cabeleireiro"),
-                                                ("Unisex", "fas fa-users", "Unisexo")
+                                            var services = new[] {
+                                                ("Todos", "fas fa-users"),
+                                                ("Barbearia", "fas fa-cut"),
+                                                ("Cabeleireiro", "fas fa-spa")
                                             };
                                         }
-                                        @foreach (var (val, icon, label) in cats)
+                                        @foreach (var (val, icon) in services)
                                         {
-                                            var isSelected = Model.SelectedCategories.Contains(val);
+                                            var isSelected = Model.ServiceGender == val;
                                             <button type="button"
-                                                    class="btn btn-sm category-pill @(isSelected ? "active" : "")"
-                                                    data-category="@val"
-                                                    id="cat-@val">
-                                                <i class="@icon me-1"></i> @label
+                                                    class="btn btn-sm service-pill @(isSelected ? "active" : "")"
+                                                    data-service="@val">
+                                                <i class="@icon me-1"></i> @(val == "Barbearia" ? "Barbearia (Masculino)" : val == "Cabeleireiro" ? "Cabeleireiro (Feminino)" : "Todos")
                                             </button>
                                         }
                                     </div>
-                                    @* Hidden inputs for selected categories *@
-                                    <div id="categoryInputs">
-                                        @foreach (var cat in Model.SelectedCategories)
-                                        {
-                                            <input type="hidden" name="SelectedCategories" value="@cat" />
-                                        }
-                                    </div>
+                                    <input type="hidden" name="ServiceGender" id="ServiceGenderInput" value="@Model.ServiceGender" />
                                 </div>
 
-                                @* Gender Pills *@
-                                <div class="col-lg-4">
-                                    <label class="form-label fw-semibold text-muted small mb-2">
-                                        <i class="fas fa-venus-mars me-1"></i> GÉNERO
-                                    </label>
-                                    <div class="d-flex gap-2 flex-wrap">
-                                        @{
-                                            var genders = new[] {
-                                                ("Male", "fas fa-mars", "Homem"),
-                                                ("Female", "fas fa-venus", "Mulher"),
-                                                ("Unisex", "fas fa-genderless", "Ambos")
-                                            };
-                                        }
-                                        @foreach (var (val, icon, label) in genders)
-                                        {
-                                            var isSelected = Model.SelectedGenders.Contains(val);
-                                            <button type="button"
-                                                    class="btn btn-sm gender-pill @(isSelected ? "active" : "")"
-                                                    data-gender="@val">
-                                                <i class="@icon me-1"></i> @label
-                                            </button>
-                                        }
-                                    </div>
-                                    <div id="genderInputs">
-                                        @foreach (var g in Model.SelectedGenders)
-                                        {
-                                            <input type="hidden" name="SelectedGenders" value="@g" />
-                                        }
-                                    </div>
-                                </div>
-
-                                @* Extra Filters *@
+                                @* Rating Dropdown *@
                                 <div class="col-lg-3">
                                     <label class="form-label fw-semibold text-muted small mb-2">
-                                        <i class="fas fa-sliders-h me-1"></i> EXTRAS
+                                        <i class="fas fa-star me-1 text-warning"></i> AVALIAÇÃO
+                                    </label>
+                                    <select asp-for="MinRating" class="form-select form-select-sm" onchange="this.form.submit()">
+                                        <option value="">Todas as avaliações</option>
+                                        <option value="3">3+ Estrelas ★</option>
+                                        <option value="4">4+ Estrelas ★</option>
+                                        <option value="4.5">4.5+ Estrelas ★</option>
+                                    </select>
+                                </div>
+
+                                @* Radius & Mobile Extras *@
+                                <div class="col-lg-4">
+                                    <label class="form-label fw-semibold text-muted small mb-2">
+                                        <i class="fas fa-map-marker-alt me-1"></i> DISTÂNCIA
                                     </label>
                                     <div class="d-flex gap-3 flex-wrap align-items-center">
+                                        <select asp-for="RadiusInKm" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                                            <option value="2">Até 2 km</option>
+                                            <option value="5">Até 5 km</option>
+                                            <option value="10">Até 10 km</option>
+                                            <option value="15">Até 15 km</option>
+                                            <option value="20">Até 20 km</option>
+                                        </select>
                                         <div class="form-check form-switch mb-0">
                                             <input asp-for="MobileOnly" class="form-check-input" type="checkbox"
                                                    role="switch" id="mobileOnlyToggle"
@@ -123,13 +105,6 @@
                                                 <i class="fas fa-motorcycle text-warning"></i> Domicílio
                                             </label>
                                         </div>
-                                        <select asp-for="MinRating" class="form-select form-select-sm" style="width:auto;"
-                                                onchange="this.form.submit()">
-                                            <option value="">⭐ Qualquer</option>
-                                            <option value="3">⭐ 3+</option>
-                                            <option value="4">⭐ 4+</option>
-                                            <option value="4.5">⭐ 4.5+</option>
-                                        </select>
                                     </div>
                                 </div>
                             </div>
@@ -148,7 +123,7 @@
     @* Results Header *@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            @if (!string.IsNullOrWhiteSpace(Model.SearchQuery) || Model.SelectedCategories.Any() || Model.MobileOnly)
+            @if (!string.IsNullOrWhiteSpace(Model.SearchQuery) || Model.ServiceGender != "Todos" || Model.MobileOnly)
             {
                 <h2 class="h5 mb-1">
                     <span class="badge bg-primary me-2">@Model.TotalCount</span>
@@ -174,14 +149,8 @@
             {
                 <input type="hidden" name="SearchQuery" value="@Model.SearchQuery" />
             }
-            @foreach (var cat in Model.SelectedCategories)
-            {
-                <input type="hidden" name="SelectedCategories" value="@cat" />
-            }
-            @foreach (var g in Model.SelectedGenders)
-            {
-                <input type="hidden" name="SelectedGenders" value="@g" />
-            }
+            <input type="hidden" name="ServiceGender" value="@Model.ServiceGender" />
+            <input type="hidden" name="RadiusInKm" value="@Model.RadiusInKm" />
             @if (Model.MobileOnly) { <input type="hidden" name="MobileOnly" value="true" /> }
             @if (Model.MinRating.HasValue) { <input type="hidden" name="MinRating" value="@Model.MinRating" /> }
 
@@ -243,7 +212,12 @@
 
                             @* Rating chip *@
                             <div class="provider-card__rating">
-                                <strong>0.0</strong>
+                                <i class="fas fa-star text-warning me-1"></i>
+                                <strong>@(provider.Rating?.ToString("0.0") ?? "N/A")</strong>
+                                @if(provider.UserRatingsTotal.HasValue && provider.UserRatingsTotal > 0)
+                                {
+                                    <span class="ms-1 fw-normal" style="opacity:0.8; font-size:0.75rem;">(@provider.UserRatingsTotal)</span>
+                                }
                             </div>
                         </div>
 
@@ -294,12 +268,12 @@
     {
         <div class="text-center py-5">
             <div class="mb-4">
-                <i class="fas fa-search fa-4x text-muted opacity-50"></i>
+                <i class="fas fa-search-minus fa-4x text-muted opacity-50"></i>
             </div>
-            <h3 class="text-muted">Nenhum resultado encontrado</h3>
-            <p class="text-muted">Tente remover alguns filtros ou alargue a pesquisa.</p>
-            <a asp-action="Index" class="btn btn-primary mt-2">
-                <i class="fas fa-redo me-2"></i> Limpar filtros
+            <h3 class="text-muted fw-bold">Nenhum resultado encontrado com os filtros selecionados.</h3>
+            <p class="text-muted">Tente remover alguns filtros, alterar o tipo de serviço, ou aumentar a distância de pesquisa para obter mais opções.</p>
+            <a asp-action="Index" class="btn btn-outline-primary mt-3 px-4 rounded-pill">
+                <i class="fas fa-undo me-2"></i> Limpar filtros
             </a>
         </div>
     }
@@ -397,35 +371,15 @@
     .text-accent { color: #4361ee; }
 </style>
 <script>
-    // ── Category pill toggle ──
-    document.querySelectorAll('.category-pill').forEach(btn => {
+    // ── Service/Gender pill toggle ──
+    document.querySelectorAll('.service-pill').forEach(btn => {
         btn.addEventListener('click', () => {
-            btn.classList.toggle('active');
-            updateHiddenInputs('categoryInputs', 'SelectedCategories', 'category-pill');
+            document.querySelectorAll('.service-pill').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('ServiceGenderInput').value = btn.dataset.service;
             document.getElementById('searchForm').submit();
         });
     });
-
-    // ── Gender pill toggle ──
-    document.querySelectorAll('.gender-pill').forEach(btn => {
-        btn.addEventListener('click', () => {
-            btn.classList.toggle('active');
-            updateHiddenInputs('genderInputs', 'SelectedGenders', 'gender-pill');
-            document.getElementById('searchForm').submit();
-        });
-    });
-
-    function updateHiddenInputs(containerId, inputName, pillClass) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = '';
-        document.querySelectorAll('.' + pillClass + '.active').forEach(pill => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = inputName;
-            input.value = pill.dataset.category || pill.dataset.gender;
-            container.appendChild(input);
-        });
-    }
 
     // ── Card entrance animation ──
     const observer = new IntersectionObserver((entries) => {

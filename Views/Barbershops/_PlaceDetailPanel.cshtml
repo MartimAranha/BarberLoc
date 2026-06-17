@@ -1,3 +1,5 @@
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
 @* ─── Place Detail Offcanvas Panel ──────────────────────────────────────────
    This partial is included in Map.cshtml via @await Html.PartialAsync.
    All dynamic fields are populated by barbershops-map.js via data-field attributes.
@@ -5,6 +7,7 @@
      • md+  → offcanvas-end (right sidebar, 420px wide)
      • xs/sm → offcanvas-bottom (bottom sheet, 80vh)
    ─────────────────────────────────────────────────────────────────────────── *@
+<input type="hidden" id="google-maps-api-key-panel" value="@Configuration["GoogleMaps:ApiKey"]" />
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="placeDetailPanel" aria-labelledby="placeDetailPanelLabel"
      style="width: 420px; max-width: 100%;">
@@ -74,15 +77,6 @@
             @* Info Section *@
             <div class="px-4 pt-4">
 
-                @* Demo Mode badge — shown via JS when isMock/isDemoMode is true *@
-                <div id="mock-badge" class="d-none mb-2">
-                    <span class="badge rounded-pill"
-                          style="background:#fff3bf; color:#7d5900; border: 1px solid #ffe066;
-                                 font-size:.72rem; letter-spacing:.03em;">
-                        <i class="fas fa-flask me-1"></i>Modo Demo &mdash; Dados Locais
-                    </span>
-                </div>
-
                 @* Name & Rating *@
                 <h4 class="fw-bold mb-1" data-field="name">—</h4>
 
@@ -142,16 +136,7 @@
                 @* Google / Local Reviews *@
                 <div id="reviews-section" class="d-none">
                     <h6 class="fw-semibold mb-3 d-flex align-items-center gap-2">
-                        @* Google icon: shown in live mode *@
-                        <i class="fab fa-google text-danger" id="reviews-google-icon"></i>
-                        @* Flask icon: shown in demo mode — toggled by JS *@
-                        <i class="fas fa-database text-warning d-none" id="reviews-demo-icon"></i>
-                        <span id="reviews-heading-text">Avaliações Google</span>
-                        <span id="local-reviews-badge" class="badge rounded-pill d-none"
-                              style="background:#fff3bf; color:#7d5900; border:1px solid #ffe066;
-                                     font-size:.65rem; letter-spacing:.03em;">
-                            Locais
-                        </span>
+                        <span id="reviews-heading-text">Avaliações</span>
                     </h6>
                     <div id="panel-reviews-list">
                         @* Reviews injected by JS *@
@@ -159,11 +144,44 @@
                 </div>
 
                 @* CTA Buttons *@
-                <div class="d-grid gap-2 mt-4 pb-4">
-                    <a href="#" id="btn-google-maps" target="_blank" rel="noopener noreferrer"
-                       class="btn btn-primary">
-                        <i class="fas fa-map-marked-alt me-2"></i>Ver no Google Maps
-                    </a>
+                <div class="d-grid gap-2 mt-4" id="panel-cta-buttons">
+                    <button type="button" id="btn-directions" class="btn btn-primary d-none"
+                            onclick="toggleDirectionsPanel()">
+                        <i class="fas fa-route me-2"></i>Como Chegar
+                    </button>
+                </div>
+
+                @* Embedded Directions Panel *@
+                <div id="directions-embed-container" class="d-none mt-3 mb-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="small fw-semibold" style="color:#94a3b8;">
+                            <i class="fas fa-map-location-dot me-1" style="color:#4f7cf0;"></i>
+                            Rota até ao destino
+                        </span>
+                        <button type="button" class="btn btn-sm" style="color:#94a3b8;font-size:0.75rem;padding:0.2rem 0.5rem;"
+                                onclick="toggleDirectionsPanel()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="directions-loading" class="text-center py-3 d-none">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="small ms-2" style="color:#94a3b8;">A calcular rota...</span>
+                    </div>
+                    <div id="directions-geo-error" class="d-none">
+                        <div class="alert alert-warning py-2 px-3 small mb-2">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            Localização não disponível. A mostrar destino no mapa.
+                        </div>
+                    </div>
+                    <iframe id="directions-iframe"
+                            src=""
+                            width="100%"
+                            height="300"
+                            style="border:0; border-radius:0.75rem; display:none;"
+                            allowfullscreen
+                            loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade"
+                            aria-label="Mapa de rota"></iframe>
                 </div>
 
             </div>
@@ -223,5 +241,29 @@
         border-radius: 50%;
         object-fit: cover;
         background: #dee2e6;
+    }
+
+    #btn-directions {
+        background: linear-gradient(135deg, #3b5bdb, #4f7cf0);
+        border: none;
+        border-radius: 2rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        padding: 0.7rem 1.4rem;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        box-shadow: 0 4px 20px rgba(59,91,219,0.35);
+    }
+
+    #btn-directions:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 28px rgba(59,91,219,0.5);
+        filter: brightness(1.08);
+    }
+
+    #directions-embed-container {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 0.85rem;
+        padding: 0.85rem;
     }
 </style>
