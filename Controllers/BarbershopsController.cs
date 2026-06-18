@@ -146,14 +146,16 @@ namespace WebApplication1.Controllers
 
                 results.Add(new
                 {
-                    id = b.Id,
-                    name = b.Name,
-                    lat = b.Latitude,
-                    lng = b.Longitude,
-                    address = b.Address,
-                    category = b.Category.ToString(),
-                    hasMobile = hasMobile,
-                    placeId = b.PlaceId
+                    id             = b.Id,
+                    name           = b.Name,
+                    lat            = b.Latitude,
+                    lng            = b.Longitude,
+                    address        = b.Address,
+                    category       = b.Category.ToString(),
+                    hasMobile      = hasMobile,
+                    isMobileService = b.IsMobileService,
+                    imageUrl       = b.ImageUrl,
+                    placeId        = b.PlaceId
                 });
             }
 

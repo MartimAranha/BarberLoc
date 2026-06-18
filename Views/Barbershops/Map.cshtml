@@ -38,16 +38,18 @@
         top: 12px;
         left: 12px;
         z-index: 10;
-        width: 280px;
+        width: 290px;
         max-height: calc(100% - 24px);
         overflow-y: auto;
         border-radius: 1rem;
         box-shadow: 0 4px 24px rgba(0,0,0,.18);
         transition: transform 0.3s ease;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0,0,0,.15) transparent;
     }
 
     #filter-sidebar.collapsed-sidebar {
-        transform: translateX(-300px);
+        transform: translateX(-310px);
     }
 
     #toggle-sidebar-btn {
@@ -61,7 +63,7 @@
     }
 
     #toggle-sidebar-btn.sidebar-open {
-        left: 304px;
+        left: 314px;
     }
 
     /* Map loading overlay */
@@ -74,6 +76,26 @@
         border-radius: 1rem;
     }
 
+    /* Geolocation status indicator */
+    #geo-status-badge {
+        transition: opacity 0.3s ease;
+    }
+
+    /* Radius slider styling */
+    #radius-slider-row {
+        transition: opacity 0.3s ease, max-height 0.3s ease;
+        overflow: hidden;
+    }
+
+    #radius-slider-row.geo-disabled {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    #filter-radius {
+        accent-color: #4361ee;
+    }
+
     @@media (max-width: 767.98px) {
         #map-container {
             height: 70vh;
@@ -81,7 +103,7 @@
         }
         #filter-sidebar {
             width: calc(100vw - 24px);
-            max-height: 45vh;
+            max-height: 55vh;
             top: auto;
             bottom: 12px;
             left: 12px;
@@ -99,7 +121,7 @@
         }
         #toggle-sidebar-btn.sidebar-open {
             left: auto;
-            bottom: calc(45vh + 20px);
+            bottom: calc(55vh + 20px);
         }
     }
 </style>
@@ -140,6 +162,7 @@
             <i class="fas fa-sliders-h text-primary me-2"></i>Filtrar Resultados
         </h6>
 
+        @* ── Categoria ─────────────────────────────────────────────────────── *@
         <div class="mb-3">
             <label class="form-label small fw-semibold">Categoria</label>
             <div class="d-flex flex-wrap gap-1">
@@ -150,6 +173,7 @@
             </div>
         </div>
 
+        @* ── Avaliação Mínima ─────────────────────────────────────────────── *@
         <div class="mb-3">
             <label class="form-label small fw-semibold">Avaliação Mínima</label>
             <div class="d-flex flex-wrap gap-1">
@@ -160,13 +184,38 @@
             </div>
         </div>
 
+        @* ── Serviço ao Domicílio ─────────────────────────────────────────── *@
         <div class="mb-3">
-            <label class="form-label small fw-semibold">Serviços</label>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="filter-mobile" value="1">
-                <label class="form-check-label small" for="filter-mobile">
-                    <i class="fas fa-home text-info me-1"></i>Serviço ao Domicílio
+            <label class="form-label small fw-semibold">Tipo de Serviço</label>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="filter-mobile" value="1">
+                <label class="form-check-label small fw-medium" for="filter-mobile">
+                    <i class="fas fa-home text-info me-1"></i>
+                    Apenas ao Domicílio
+                    <span class="badge bg-info text-dark ms-1" style="font-size: 0.6rem;">NOVO</span>
                 </label>
+            </div>
+        </div>
+
+        @* ── Distância / Raio ─────────────────────────────────────────────── *@
+        <div class="mb-3" id="radius-slider-row">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <label class="form-label small fw-semibold mb-0" for="filter-radius">
+                    <i class="fas fa-location-arrow text-primary me-1"></i>
+                    Raio de Pesquisa
+                </label>
+                <span id="radius-label" class="badge bg-primary" style="font-size:0.7rem;">10 km</span>
+            </div>
+            <input type="range" class="form-range" id="filter-radius"
+                   min="1" max="50" step="1" value="10"
+                   aria-label="Raio de pesquisa em quilómetros">
+            @* Geolocation status indicator *@
+            <div id="geo-status-badge" class="mt-1">
+                <small id="geo-status-text" class="text-muted" style="font-size: 0.7rem;">
+                    <i class="fas fa-location-dot me-1"></i>
+                    <span id="geo-status-msg">A aguardar localização...</span>
+                </small>
             </div>
         </div>
 
@@ -194,6 +243,157 @@
             defaultLat: 38.7169,
             defaultLng: -9.1399
         };
+
+        // ── Geolocation module-scope state ────────────────────────────────────────
+        // Stored here (not in barbershops-map.js) so the server-owned filter panel
+        // can read user coordinates and inject them into the GetMapData query.
+        window.BarberLocGeo = {
+            userLat: null,
+            userLng: null,
+            granted: false
+        };
+
+        // ── Geolocation request + radius slider wiring ────────────────────────────
+        // Runs once on DOM ready, independent of Google Maps loading.
+        document.addEventListener('DOMContentLoaded', function () {
+            const radiusRow   = document.getElementById('radius-slider-row');
+            const radiusSlider = document.getElementById('filter-radius');
+            const radiusLabel  = document.getElementById('radius-label');
+            const geoStatusMsg = document.getElementById('geo-status-msg');
+            const radiusSliderRowEl = document.getElementById('radius-slider-row');
+
+            // ── Update radius label on slider change ─────────────────────────────
+            if (radiusSlider) {
+                radiusSlider.addEventListener('input', function () {
+                    if (radiusLabel) radiusLabel.textContent = this.value + ' km';
+                    // Trigger a map reload if we already have coordinates
+                    if (window.BarberLocGeo.granted) {
+                        debouncedFetchAndRender();
+                    }
+                });
+            }
+
+            // ── Request geolocation ───────────────────────────────────────────────
+            if (navigator.geolocation) {
+                radiusSliderRowEl?.classList.add('geo-disabled');
+
+                navigator.geolocation.getCurrentPosition(
+                    function (position) {
+                        // ✅ Permission granted
+                        window.BarberLocGeo.userLat = position.coords.latitude;
+                        window.BarberLocGeo.userLng = position.coords.longitude;
+                        window.BarberLocGeo.granted = true;
+
+                        radiusSliderRowEl?.classList.remove('geo-disabled');
+                        if (geoStatusMsg) {
+                            geoStatusMsg.innerHTML = '<i class="fas fa-circle-check text-success me-1"></i>Localização obtida';
+                        }
+
+                        // Re-fetch markers now that we have coordinates and a radius
+                        fetchAndRender();
+                    },
+                    function (error) {
+                        // ❌ Permission denied or unavailable
+                        window.BarberLocGeo.granted = false;
+                        radiusSliderRowEl?.classList.add('geo-disabled');
+                        if (geoStatusMsg) {
+                            geoStatusMsg.innerHTML = '<i class="fas fa-ban text-danger me-1"></i>Localização não disponível — a mostrar todos';
+                        }
+                        // Still load all markers without distance filtering
+                        fetchAndRender();
+                    },
+                    { timeout: 8000, maximumAge: 300000 }
+                );
+            } else {
+                // Browser doesn't support geolocation
+                radiusSliderRowEl?.classList.add('geo-disabled');
+                if (geoStatusMsg) {
+                    geoStatusMsg.innerHTML = '<i class="fas fa-ban text-secondary me-1"></i>Geolocalização não suportada';
+                }
+            }
+
+            // ── Home-Service toggle re-fetch ─────────────────────────────────────
+            const mobileCb = document.getElementById('filter-mobile');
+            if (mobileCb) {
+                mobileCb.addEventListener('change', function () {
+                    fetchAndRender();
+                });
+            }
+
+            // ── Reset button ─────────────────────────────────────────────────────
+            const resetBtn = document.getElementById('btn-reset-filters');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function () {
+                    // Reset filter chips
+                    document.querySelectorAll('.filter-btn').forEach(function (b) {
+                        b.classList.toggle('active', b.dataset.value === '');
+                    });
+                    // Reset mobile toggle
+                    if (mobileCb) mobileCb.checked = false;
+                    // Reset radius slider
+                    if (radiusSlider) {
+                        radiusSlider.value = 10;
+                        if (radiusLabel) radiusLabel.textContent = '10 km';
+                    }
+                    fetchAndRender();
+                });
+            }
+        });
+
+        // ── Build the GetMapData query string from all active filters ─────────────
+        function buildQueryString() {
+            const geo      = window.BarberLocGeo;
+            const mobileCb = document.getElementById('filter-mobile');
+            const radiusEl = document.getElementById('filter-radius');
+
+            const params = new URLSearchParams();
+
+            // Distance / geolocation filter
+            if (geo.granted && geo.userLat != null && geo.userLng != null) {
+                params.set('lat',      geo.userLat.toString());
+                params.set('lng',      geo.userLng.toString());
+                params.set('radiusKm', radiusEl ? radiusEl.value : '10');
+            }
+
+            // Home-service toggle
+            if (mobileCb && mobileCb.checked) {
+                params.set('mobileOnly', 'true');
+            }
+
+            return params.toString() ? '/Barbershops/GetMapData?' + params.toString()
+                                     : '/Barbershops/GetMapData';
+        }
+
+        // ── Fetch barbershops from server and render via barbershops-map.js ────────
+        // barbershops-map.js exposes window.BarberLocMapBridge for external callers.
+        async function fetchAndRender() {
+            const url = buildQueryString();
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const places = await resp.json();
+
+                // Apply client-side category + rating filters (handled in barbershops-map.js)
+                if (typeof window.BarberLocMapBridge?.receiveServerData === 'function') {
+                    window.BarberLocMapBridge.receiveServerData(places);
+                }
+                // Update result count
+                const countEl = document.getElementById('results-count');
+                if (countEl) countEl.textContent = places.length + ' resultado' + (places.length !== 1 ? 's' : '');
+            } catch (err) {
+                console.error('[BarberLoc] fetchAndRender error:', err);
+            }
+        }
+
+        // Debounce so slider drags don't fire 50 XHR requests
+        let _fetchTimer = null;
+        function debouncedFetchAndRender() {
+            clearTimeout(_fetchTimer);
+            _fetchTimer = setTimeout(fetchAndRender, 350);
+        }
+
+        // Make fetchAndRender globally accessible for barbershops-map.js
+        window.BarberLocFetchAndRender = fetchAndRender;
     </script>
 
     @*

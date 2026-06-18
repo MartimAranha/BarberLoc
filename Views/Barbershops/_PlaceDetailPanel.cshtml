@@ -68,10 +68,20 @@
                 </div>
             </div>
 
-            @* No-photo placeholder *@
-            <div id="photo-placeholder" class="d-none bg-dark d-flex align-items-center justify-content-center"
-                 style="height: 220px;">
-                <i class="fas fa-store fa-5x text-secondary opacity-50"></i>
+            @* No-photo placeholder — JS injects imageUrl here when available *@
+            <div id="photo-placeholder" class="d-none position-relative" style="height: 220px; background: #1a1a2e; overflow: hidden;">
+                @* Dynamic shop image — shown by JS when shop.imageUrl is set *@
+                <img id="placeholder-shop-image"
+                     src=""
+                     alt="Foto da barbearia"
+                     class="d-none w-100 h-100"
+                     style="object-fit: cover;"
+                     onerror="this.classList.add('d-none'); document.getElementById('placeholder-fallback-icon').classList.remove('d-none');" />
+                @* Fallback icon — shown when no imageUrl is available *@
+                <div id="placeholder-fallback-icon"
+                     class="d-flex align-items-center justify-content-center w-100 h-100">
+                    <i class="fas fa-store fa-5x text-secondary opacity-50"></i>
+                </div>
             </div>
 
             @* Info Section *@
@@ -144,11 +154,17 @@
                 </div>
 
                 @* CTA Buttons *@
-                <div class="d-grid gap-2 mt-4" id="panel-cta-buttons">
+                <div class="d-flex flex-column gap-2 mt-4" id="panel-cta-buttons">
                     <button type="button" id="btn-directions" class="btn btn-primary d-none"
                             onclick="toggleDirectionsPanel()">
                         <i class="fas fa-route me-2"></i>Como Chegar
                     </button>
+                    @* Google Maps link — premium minimalist secondary action *@
+                    <a href="#" id="btn-google-maps"
+                       target="_blank" rel="noopener noreferrer"
+                       class="btn-google-maps-sm d-none">
+                        <i class="fab fa-google"></i>Ver no Google Maps
+                    </a>
                 </div>
 
                 @* Embedded Directions Panel *@
@@ -265,5 +281,42 @@
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 0.85rem;
         padding: 0.85rem;
+    }
+
+    /* ── Google Maps secondary link — sleek, minimal, never dominates the panel ─ */
+    .btn-google-maps-sm {
+        font-size: 12px !important;
+        padding: 4px 10px !important;
+        font-weight: 500;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        /* Muted dark border that blends with the panel's dark/light theme */
+        border: 1px solid rgba(100, 116, 139, 0.45);
+        color: #64748b;
+        background: transparent;
+        text-decoration: none;
+        width: auto;
+        max-width: 200px;
+        line-height: 1.4;
+        letter-spacing: 0.01em;
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+    }
+
+    .btn-google-maps-sm:hover {
+        border-color: #4285F4;
+        color: #4285F4;
+        background: rgba(66, 133, 244, 0.06);
+        text-decoration: none;
+    }
+
+    .btn-google-maps-sm i {
+        font-size: 11px;
+        flex-shrink: 0;
+    }
+
+    .btn-google-maps-sm.d-none {
+        display: none !important;
     }
 </style>

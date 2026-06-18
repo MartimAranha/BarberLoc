@@ -40,6 +40,13 @@ namespace WebApplication1.Models
         public bool IsActive { get; set; } = true;
 
         /// <summary>
+        /// True when this barbershop operates as a mobile/home-service provider
+        /// (i.e. the barber visits the customer's location).
+        /// Used by the Explore map to filter "Serviço ao Domicílio".
+        /// </summary>
+        public bool IsMobileService { get; set; } = false;
+
+        /// <summary>
         /// Operational status sourced from Google Places API <c>business_status</c> field.
         /// Defaults to <see cref="OperationalStatus.Active"/> so existing rows are not disrupted.
         /// </summary>

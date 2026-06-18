@@ -133,9 +133,17 @@ window.initMap = function () {
 };
 
 // ── Load all barbershop markers from server ───────────────────────────────────
+// If the page has registered a geo-aware fetch bridge (Map.cshtml), delegate to it
+// so geolocation + radius params are automatically included. Otherwise fall back
+// to a plain fetch of all shops.
 async function loadMarkers() {
-    showMapLoading(true);
+    // Prefer the geo-aware fetcher registered by Map.cshtml's inline script
+    if (typeof window.BarberLocFetchAndRender === 'function') {
+        await window.BarberLocFetchAndRender();
+        return;
+    }
 
+    showMapLoading(true);
     try {
         const resp = await fetch('/Barbershops/GetMapData');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -149,6 +157,16 @@ async function loadMarkers() {
         showMapLoading(false);
     }
 }
+
+// ── External data bridge — called by Map.cshtml's fetchAndRender() ─────────────
+// Receives a fresh array of places from the server (with geo + mobile filters
+// already applied) and pushes them through the local client-side filter chain.
+window.BarberLocMapBridge = {
+    receiveServerData: function (places) {
+        allPlaces = places || [];
+        applyFilters();
+    }
+};
 
 // ── Render / re-render markers from a place list ──────────────────────────────
 // FIX 1 + 2: Markers are assigned to `map` immediately on construction and
@@ -377,7 +395,7 @@ function populatePanel(d) {
     }
 
     // Photos carousel
-    renderPhotoCarousel(d.photos || []);
+    renderPhotoCarousel(d.photos || [], d.imageUrl || null);
 
     // Reviews
     renderReviews(d.reviews || []);
@@ -398,6 +416,15 @@ function populatePanel(d) {
         existingIframe.src = '';
     }
 
+    // Google Maps external link — show when we have a maps URL or address
+    const mapsBtn = el('btn-google-maps');
+    if (mapsBtn) {
+        const mapsUrl = d.googleMapsUrl ||
+            'https://maps.google.com/?q=' + encodeURIComponent(d.formattedAddress || d.name || '');
+        mapsBtn.href = mapsUrl;
+        mapsBtn.classList.remove('d-none');
+    }
+
     // Favourite button
     setupFavouriteButton(d);
 }
@@ -416,9 +443,12 @@ function fillBasicPanelFromMarker(place) {
     el('hours-section')?.classList.add('d-none');
     el('reviews-section')?.classList.add('d-none');
     el('photo-carousel-wrapper')?.classList.add('d-none');
-    el('photo-placeholder')?.classList.remove('d-none');
     el('mock-badge')?.classList.add('d-none');
     el('btn-favourite')?.classList.add('d-none');
+
+    // ── Photo placeholder: show imageUrl if present, icon fallback otherwise ───
+    setPlaceholderImage(place.imageUrl || null);
+    el('photo-placeholder')?.classList.remove('d-none');
 
     // Reset review header to default (Google) state
     el('reviews-google-icon')?.classList.remove('d-none');
@@ -440,10 +470,34 @@ function fillBasicPanelFromMarker(place) {
         existingIframe2.style.display = 'none';
         existingIframe2.src = '';
     }
+
+    // Google Maps link from local data
+    const mapsBtn2 = el('btn-google-maps');
+    if (mapsBtn2) {
+        mapsBtn2.href = 'https://maps.google.com/?q=' + encodeURIComponent(place.address || place.name || '');
+        mapsBtn2.classList.remove('d-none');
+    }
+}
+
+// ── Set placeholder image (or fall back to icon) ─────────────────────────────
+function setPlaceholderImage(imageUrl) {
+    const img  = el('placeholder-shop-image');
+    const icon = el('placeholder-fallback-icon');
+    if (!img || !icon) return;
+
+    if (imageUrl) {
+        img.src = imageUrl;
+        img.classList.remove('d-none');
+        icon.classList.add('d-none');
+    } else {
+        img.src = '';
+        img.classList.add('d-none');
+        icon.classList.remove('d-none');
+    }
 }
 
 // ── Photo Carousel ────────────────────────────────────────────────────────────
-function renderPhotoCarousel(photos) {
+function renderPhotoCarousel(photos, fallbackImageUrl) {
     const wrapper    = el('photo-carousel-wrapper');
     const placeholder = el('photo-placeholder');
     const inner      = el('carousel-inner');
@@ -454,10 +508,14 @@ function renderPhotoCarousel(photos) {
 
     if (!photos || photos.length === 0) {
         wrapper.classList.add('d-none');
+        // Show placeholder with dynamic image or icon
+        setPlaceholderImage(fallbackImageUrl || null);
         placeholder.classList.remove('d-none');
         return;
     }
 
+    // Real photos available — reset placeholder state before hiding
+    setPlaceholderImage(null);
     placeholder.classList.add('d-none');
     wrapper.classList.remove('d-none');
 
