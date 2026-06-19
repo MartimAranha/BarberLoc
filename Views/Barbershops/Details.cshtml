@@ -149,8 +149,10 @@
                         }
                     </div>
 
+
+
                     <div class="d-grid gap-2 d-md-flex mt-auto">
-                        <a asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@Model.Id" 
+                        <a id="btn-fazer-reserva" asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@Model.Id" 
                            class="btn btn-primary btn-lg flex-fill rounded-pill shadow-sm">
                             <i class="fas fa-calendar-plus me-2"></i> Fazer Reserva
                         </a>
@@ -159,6 +161,50 @@
                                 onclick="toggleDetailsDirections()">
                             <i class="fas fa-route me-2"></i> Como Chegar
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UBER EATS STYLE SIMULATION STANDALONE -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0 my-4" style="border-left: 5px solid #28a745 !important; background: linear-gradient(135deg, #ffffff, #f8f9fa);">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-2"><i class="fas fa-motorcycle text-success me-2"></i> Pedir Barbeiro ao Domicílio (Estilo Uber)</h5>
+                    <p class="text-secondary small mb-3">Ative o interruptor abaixo para que o profissional se desloque à sua morada com uma taxa estimada em tempo real.</p>
+                    
+                    <!-- Toggle Switch -->
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="domicilio-toggle-switch" style="cursor: pointer; width: 45px; height: 22px;">
+                        <label class="form-check-label fw-bold ms-2" for="domicilio-toggle-switch" style="cursor: pointer;">Solicitar atendimento em minha Casa</label>
+                    </div>
+
+                    <!-- Dynamic Inputs & Actions (Hidden until toggled) -->
+                    <div id="domicilio-interactive-panel" style="display: none; border-top: 1px dashed #dee2e6; padding-top: 15px;">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Introduza a sua morada de entrega:</label>
+                            <div class="input-group">
+                                <input type="text" id="domicilio-user-address" class="form-control" placeholder="Ex: Rua da Glória, Lisboa...">
+                                <button class="btn btn-dark fw-bold" type="button" id="domicilio-calc-btn">Calcular Deslocação</button>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Fee Results Display Box -->
+                        <div id="domicilio-results-box" class="alert alert-success d-none py-2 px-3 my-2">
+                            <div class="d-flex justify-content-between align-items-center small fw-bold">
+                                <span id="domicilio-distance-text" class="text-secondary"></span>
+                                <span id="domicilio-fee-text" class="text-success" style="font-size: 1.1rem;"></span>
+                            </div>
+                        </div>
+
+                        <!-- Final Action Submission Button -->
+                        <div id="domicilio-submit-block" class="d-none mt-3">
+                            <a id="domicilio-final-link" href="/Bookings/Create?barbershopId=@Model.Id&shopName=@Uri.EscapeDataString(Model.Name ?? "")" class="btn btn-success btn-lg w-100 fw-bold rounded-pill shadow-sm">
+                                <i class="fas fa-check-circle me-2"></i> Confirmar e Chamar Barbeiro
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -228,7 +274,7 @@
                                 <h5 class="card-title fw-bold mb-0 text-dark">
                                     @service.Name
                                 </h5>
-                                <span class="badge bg-primary text-white rounded-pill px-3 py-2 fs-6">
+                                <span class="badge bg-primary text-white rounded-pill px-3 py-2 fs-6 service-price-badge">
                                     €@service.Price.ToString("0.00")
                                 </span>
                             </div>
@@ -415,6 +461,95 @@
                 showIframe(buildEmbedUrl(null));
             }
         }
+
+        // ── Uber Style Domicílio Simulation ──
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggle = document.getElementById('domicilio-toggle-switch');
+            const panel = document.getElementById('domicilio-interactive-panel');
+            const calcBtn = document.getElementById('domicilio-calc-btn');
+            const addressInput = document.getElementById('domicilio-user-address');
+            const resultsBox = document.getElementById('domicilio-results-box');
+            const distanceText = document.getElementById('domicilio-distance-text');
+            const feeText = document.getElementById('domicilio-fee-text');
+            const submitBlock = document.getElementById('domicilio-submit-block');
+            const finalLink = document.getElementById('domicilio-final-link');
+            const mainReservaBtn = document.getElementById('btn-fazer-reserva');
+            
+            // Capture shopId and shopName for safe routing
+            const shopId = '@Model.Id';
+            const shopName = '@Html.Raw(Model.Name?.Replace("'", "\\'") ?? "")';
+            
+            let currentNotes = "";
+
+            if(toggle) {
+                toggle.addEventListener('change', function() {
+                    if(this.checked) {
+                        panel.style.display = 'block';
+                    } else {
+                        panel.style.display = 'none';
+                        resultsBox.classList.add('d-none');
+                        submitBlock.classList.add('d-none');
+                        currentNotes = "";
+                        updateLinks();
+                    }
+                });
+            }
+
+            if(calcBtn) {
+                calcBtn.addEventListener('click', function() {
+                    const addr = addressInput.value.trim();
+                    if(!addr) {
+                        alert("Por favor, introduza uma morada válida.");
+                        return;
+                    }
+                    
+                    calcBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A calcular...';
+                    calcBtn.disabled = true;
+                    
+                    setTimeout(() => {
+                        const distance = (Math.random() * 6 + 2).toFixed(1); // 2km to 8km
+                        const fee = (distance * 0.50).toFixed(2);
+                        
+                        distanceText.innerHTML = `<i class="fas fa-car me-1"></i> Distância: ${distance} km`;
+                        feeText.innerHTML = `+€${fee}`;
+                        
+                        resultsBox.classList.remove('d-none');
+                        
+                        currentNotes = `[Serviço ao Domicílio (Uber-Style)] Morada: ${addr} | Distância: ${distance}km | Taxa Adicional: €${fee}`;
+                        updateLinks();
+                        
+                        calcBtn.innerHTML = 'Calcular Deslocação';
+                        calcBtn.disabled = false;
+                        
+                        submitBlock.classList.remove('d-none');
+                    }, 800);
+                });
+            }
+
+            function updateLinks() {
+                // Always include both barbershopId AND shopName so the
+                // Bookings controller can resolve the shop regardless of
+                // whether the ID is a real DB row or a Google Places proxy.
+                const baseHref = `/Bookings/Create?barbershopId=${encodeURIComponent(shopId)}&shopName=${encodeURIComponent(shopName)}`;
+
+                // Update the Uber-style confirm button
+                if (finalLink) {
+                    finalLink.href = currentNotes
+                        ? `${baseHref}&Notes=${encodeURIComponent(currentNotes)}`
+                        : baseHref;
+                }
+
+                // Only patch the main "Fazer Reserva" button when there ARE
+                // home-service notes — otherwise leave the tag-helper URL intact.
+                if (mainReservaBtn && currentNotes) {
+                    mainReservaBtn.href = `${baseHref}&Notes=${encodeURIComponent(currentNotes)}`;
+                } else if (mainReservaBtn && !currentNotes) {
+                    // Reset to the original server-rendered href (no stale notes)
+                    mainReservaBtn.href = `/Bookings/Create?barbershopId=${encodeURIComponent(shopId)}&shopName=${encodeURIComponent(shopName)}`;
+                }
+            }
+        });
     </script>
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=@Configuration["GoogleMaps:ApiKey"]&callback=initMap"></script>
 }
+

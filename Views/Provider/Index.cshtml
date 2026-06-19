@@ -46,7 +46,7 @@
                             @* ── Filter Row ── *@
                             <div class="row g-3 align-items-end">
                                 @* Service/Gender Badges *@
-                                <div class="col-lg-5">
+                                <div class="col-lg-8">
                                     <label class="form-label fw-semibold text-muted small mb-2">
                                         <i class="fas fa-venus-mars me-1"></i> SERVIÇO / GÉNERO
                                     </label>
@@ -72,7 +72,7 @@
                                 </div>
 
                                 @* Rating Dropdown *@
-                                <div class="col-lg-3">
+                                <div class="col-lg-4">
                                     <label class="form-label fw-semibold text-muted small mb-2">
                                         <i class="fas fa-star me-1 text-warning"></i> AVALIAÇÃO
                                     </label>
@@ -84,29 +84,6 @@
                                     </select>
                                 </div>
 
-                                @* Radius & Mobile Extras *@
-                                <div class="col-lg-4">
-                                    <label class="form-label fw-semibold text-muted small mb-2">
-                                        <i class="fas fa-map-marker-alt me-1"></i> DISTÂNCIA
-                                    </label>
-                                    <div class="d-flex gap-3 flex-wrap align-items-center">
-                                        <select asp-for="RadiusInKm" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-                                            <option value="2">Até 2 km</option>
-                                            <option value="5">Até 5 km</option>
-                                            <option value="10">Até 10 km</option>
-                                            <option value="15">Até 15 km</option>
-                                            <option value="20">Até 20 km</option>
-                                        </select>
-                                        <div class="form-check form-switch mb-0">
-                                            <input asp-for="MobileOnly" class="form-check-input" type="checkbox"
-                                                   role="switch" id="mobileOnlyToggle"
-                                                   onchange="this.form.submit()" />
-                                            <label class="form-check-label small" for="mobileOnlyToggle">
-                                                <i class="fas fa-motorcycle text-warning"></i> Domicílio
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
 
                         </div>
@@ -123,7 +100,7 @@
     @* Results Header *@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            @if (!string.IsNullOrWhiteSpace(Model.SearchQuery) || Model.ServiceGender != "Todos" || Model.MobileOnly)
+            @if (!string.IsNullOrWhiteSpace(Model.SearchQuery) || Model.ServiceGender != "Todos")
             {
                 <h2 class="h5 mb-1">
                     <span class="badge bg-primary me-2">@Model.TotalCount</span>
@@ -150,8 +127,6 @@
                 <input type="hidden" name="SearchQuery" value="@Model.SearchQuery" />
             }
             <input type="hidden" name="ServiceGender" value="@Model.ServiceGender" />
-            <input type="hidden" name="RadiusInKm" value="@Model.RadiusInKm" />
-            @if (Model.MobileOnly) { <input type="hidden" name="MobileOnly" value="true" /> }
             @if (Model.MinRating.HasValue) { <input type="hidden" name="MinRating" value="@Model.MinRating" /> }
 
             <label class="text-muted small mb-0 me-1">Ordenar:</label>
