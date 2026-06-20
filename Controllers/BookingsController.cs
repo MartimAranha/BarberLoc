@@ -42,6 +42,7 @@ namespace WebApplication1.Controllers
                 var externalVm = new AppointmentCreateViewModel
                 {
                     BarbershopId = 0,
+                    ShopName = shopName,
                     Barbershop = new Barbershop { Name = shopName ?? "Serviço ao Domicílio", Address = "Localização Externa", IsActive = true },
                     Notes = Notes,
                     AvailableServices = new List<Service>()
@@ -70,14 +71,22 @@ namespace WebApplication1.Controllers
         // ── POST: /Bookings/Create ─────────────────────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(AppointmentCreateViewModel vm, [FromForm] string? shopName)
+        public async Task<IActionResult> Create(AppointmentCreateViewModel vm)
         {
             Barbershop? barbershop = null;
 
             if (vm.BarbershopId == 0)
             {
-                barbershop = new Barbershop { Name = shopName ?? "Serviço ao Domicílio", Address = "Localização Externa", IsActive = true };
-                vm.Barbershop = barbershop;
+                var proxyShopName = string.IsNullOrWhiteSpace(vm.ShopName) ? "Serviço ao Domicílio" : vm.ShopName;
+                
+                // Append the external shop name to the Notes instead of creating a proxy shop in the DB
+                if (!string.IsNullOrWhiteSpace(proxyShopName))
+                {
+                    vm.Notes = string.IsNullOrWhiteSpace(vm.Notes) 
+                        ? $"Local/Profissional: {proxyShopName}" 
+                        : $"{vm.Notes}\nLocal/Profissional: {proxyShopName}";
+                }
+                
                 vm.AvailableServices = new List<Service>();
             }
             else
@@ -98,7 +107,7 @@ namespace WebApplication1.Controllers
             if (vm.BookingDate.Date < DateTime.Today.AddDays(1))
                 ModelState.AddModelError(nameof(vm.BookingDate), "A data da reserva deve ser a partir de amanhã.");
 
-            if (vm.IsOnSite && vm.ServiceId.HasValue && barbershop.Services != null)
+            if (vm.IsOnSite && vm.ServiceId.HasValue && barbershop != null && barbershop.Services != null)
             {
                 var selectedService = barbershop.Services.FirstOrDefault(s => s.Id == vm.ServiceId);
                 if (selectedService != null && !selectedService.IsMobile)
@@ -116,7 +125,7 @@ namespace WebApplication1.Controllers
             var booking = new Booking
             {
                 UserId = user.Id,
-                BarbershopId = vm.BarbershopId,
+                BarbershopId = vm.BarbershopId == 0 ? null : vm.BarbershopId,
                 ServiceId = vm.ServiceId,
                 BookingDate = vm.BookingDate,
                 BookingTime = vm.BookingTime,

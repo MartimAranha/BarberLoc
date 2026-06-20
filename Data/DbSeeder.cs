@@ -45,6 +45,22 @@ namespace WebApplication1.Data
                 await userManager.AddToRoleAsync(sampleUser, "User");
             }
 
+            // ── Seed Test User for Integration Tests ─────────────────────────────────
+            if (await userManager.FindByIdAsync("test-user-id") == null)
+            {
+                var testUser = new ApplicationUser
+                {
+                    Id = "test-user-id",
+                    UserName = "testuser@barberloc.pt",
+                    Email = "testuser@barberloc.pt",
+                    FullName = "Test User",
+                    EmailConfirmed = true,
+                    CreatedAt = DateTime.Now
+                };
+                await userManager.CreateAsync(testUser, "Test1234!");
+                await userManager.AddToRoleAsync(testUser, "User");
+            }
+
             // ── Purge existing Barbershops ───────────────────────────────────────────
             // Always purge and re-seed so demo data is consistent across restarts.
             if (await context.Barbershops.AnyAsync())

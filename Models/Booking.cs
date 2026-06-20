@@ -10,8 +10,7 @@ namespace WebApplication1.Models
         [Required]
         public string UserId { get; set; } = string.Empty;
         
-        [Required]
-        public int BarbershopId { get; set; }
+        public int? BarbershopId { get; set; }
         
         public int? ServiceId { get; set; }
         

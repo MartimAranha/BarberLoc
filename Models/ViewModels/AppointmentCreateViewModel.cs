@@ -11,6 +11,7 @@ namespace WebApplication1.Models.ViewModels
     {
         // ── Hidden / Routing Fields ────────────────────────────────────────────
         public int BarbershopId { get; set; }
+        public string? ShopName { get; set; }
 
         // ── Barbershop Context (populated by controller, not bound from form) ──
         public Barbershop? Barbershop { get; set; }

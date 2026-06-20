@@ -1,0 +1,52 @@
+@model WebApplication1.Controllers.DiagnosticsViewModel
+@{
+    ViewData["Title"] = "System Diagnostics";
+}
+
+<div class="container my-5">
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-dark text-white p-4 rounded-top-4">
+            <h4 class="mb-0"><i class="fas fa-server me-2"></i> System Diagnostics</h4>
+        </div>
+        <div class="card-body p-4">
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 bg-light border-0">
+                        <div class="card-body">
+                            <h6 class="text-muted text-uppercase fw-bold mb-3">Environment</h6>
+                            <p class="fs-5 mb-0">
+                                @if(Model.EnvironmentName == "Development") {
+                                    <span class="badge bg-warning text-dark"><i class="fas fa-code me-1"></i> @Model.EnvironmentName</span>
+                                } else if(Model.EnvironmentName == "Testing") {
+                                    <span class="badge bg-info"><i class="fas fa-vial me-1"></i> @Model.EnvironmentName</span>
+                                } else {
+                                    <span class="badge bg-success"><i class="fas fa-rocket me-1"></i> @Model.EnvironmentName</span>
+                                }
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100 bg-light border-0">
+                        <div class="card-body">
+                            <h6 class="text-muted text-uppercase fw-bold mb-3">Database Connection</h6>
+                            <p class="fs-5 mb-0">
+                                @if(Model.DatabaseConnected) {
+                                    <span class="text-success"><i class="fas fa-check-circle me-1"></i> Connected</span>
+                                } else {
+                                    <span class="text-danger"><i class="fas fa-times-circle me-1"></i> Disconnected</span>
+                                }
+                            </p>
+                            <p class="small text-muted mt-2 mb-0">Provider: @Model.DatabaseProvider</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info border-0 mt-3 mb-0">
+                <i class="fas fa-clock me-2"></i> Server Time (UTC): @Model.CurrentTime.ToString("yyyy-MM-dd HH:mm:ss")
+            </div>
+        </div>
+    </div>
+</div>

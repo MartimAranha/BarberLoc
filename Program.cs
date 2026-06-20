@@ -34,6 +34,10 @@ namespace WebApplication1
             //   • Idle connection pool recycling
             // CommandTimeout raised to 60 s for migration runs that may generate large schemas.
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            {
+                if (builder.Environment.IsEnvironment("Testing"))
+                    return; // Tests will configure their own provider
+
                 options.UseSqlServer(
                     builder.Configuration.GetConnectionString("DefaultConnection"),
                     sqlOptions =>
@@ -45,8 +49,8 @@ namespace WebApplication1
                         );
                         sqlOptions.CommandTimeout(60);
                     }
-                )
-            );
+                );
+            });
 
             // ── ASP.NET Core Identity ──────────────────────────────────────────
             builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
@@ -152,8 +156,16 @@ The application will now halt.
                     var strategy = context.Database.CreateExecutionStrategy();
                     await strategy.ExecuteAsync(async () =>
                     {
-                        logger.LogInformation("Applying migrations and ensuring database is created...");
-                        await context.Database.MigrateAsync();
+                        if (context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+                        {
+                            logger.LogInformation("Applying migrations and ensuring database is created...");
+                            await context.Database.MigrateAsync();
+                        }
+                        else
+                        {
+                            logger.LogInformation("In-Memory database detected. Skipping migrations.");
+                            await context.Database.EnsureCreatedAsync();
+                        }
 
                         var userManager  = services.GetRequiredService<UserManager<ApplicationUser>>();
                         var roleManager  = services.GetRequiredService<RoleManager<IdentityRole>>();
@@ -196,3 +208,5 @@ The application will now halt.
         }
     }
 }
+
+public partial class Program { }

@@ -50,9 +50,8 @@
                     <div asp-validation-summary="ModelOnly" class="alert alert-danger border-0 rounded-3"></div>
 
                     <form asp-action="Create" method="post" id="bookingForm" novalidate>
-                        <input type="hidden" name="barbershopId" value="@Context.Request.Query["barbershopId"]" />
-                        <input type="hidden" name="shopName" value="@Context.Request.Query["shopName"]" />
-                        <input type="hidden" name="Notes" value="@Context.Request.Query["Notes"]" />
+                        <input type="hidden" asp-for="BarbershopId" />
+                        <input type="hidden" asp-for="ShopName" />
                         <input asp-for="UserLat" type="hidden" id="userLat" />
                         <input asp-for="UserLng" type="hidden" id="userLng" />
 
