@@ -229,12 +229,8 @@
 
                             <div class="mt-auto d-flex gap-2">
                                 <a asp-action="Details" asp-route-id="@provider.GooglePlaceId"
-                                   class="btn btn-primary flex-fill btn-sm" id="details-@provider.GooglePlaceId">
+                                   class="btn btn-primary w-100 btn-sm" id="details-@provider.GooglePlaceId">
                                     <i class="fas fa-info-circle me-1"></i> Ver Perfil
-                                </a>
-                                <a asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@provider.Id"
-                                   class="btn btn-outline-primary btn-sm" id="book-@provider.Id">
-                                    <i class="fas fa-calendar-plus me-1"></i> Reservar
                                 </a>
                             </div>
                         </div>

@@ -50,7 +50,9 @@
                     <div asp-validation-summary="ModelOnly" class="alert alert-danger border-0 rounded-3"></div>
 
                     <form asp-action="Create" method="post" id="bookingForm" novalidate>
-                        <input asp-for="BarbershopId" type="hidden" />
+                        <input type="hidden" name="barbershopId" value="@Context.Request.Query["barbershopId"]" />
+                        <input type="hidden" name="shopName" value="@Context.Request.Query["shopName"]" />
+                        <input type="hidden" name="Notes" value="@Context.Request.Query["Notes"]" />
                         <input asp-for="UserLat" type="hidden" id="userLat" />
                         <input asp-for="UserLng" type="hidden" id="userLng" />
 
@@ -100,8 +102,8 @@
                             <label asp-for="Notes" class="form-label fw-semibold">
                                 <i class="fas fa-sticky-note text-primary me-1"></i> Notas Adicionais
                             </label>
-                            <textarea asp-for="Notes" class="form-control rounded-3" rows="3"
-                                      placeholder="Preferências, solicitações especiais, estilo de corte..."></textarea>
+                            <textarea id="Notes" name="Notes" class="form-control rounded-3" rows="3"
+                                      placeholder="Preferências, solicitações especiais, estilo de corte...">@Context.Request.Query["Notes"]</textarea>
                             <span asp-validation-for="Notes" class="text-danger small"></span>
                         </div>
 

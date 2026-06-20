@@ -1,83 +1,89 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
-    ViewData["Title"] = "Barbearias - Live Map";
-    var googleApiKey = ViewData["GoogleApiKey"] as string ?? string.Empty;
+    ViewData["Title"] = "Barbearias ao Domicílio - Live Map";
+    var googleApiKey = Configuration["GoogleMaps:ApiKey"] ?? ViewData["GoogleApiKey"] as string;
 }
 
 <style>
-    /* Full height layout minus navbar */
     body {
-        overflow: hidden; /* prevent body scroll, handle scroll in sidebar */
+        overflow: hidden;
     }
-    .split-container {
-        display: flex;
-        height: calc(100vh - 56px); /* Adjust based on your navbar height */
+    .map-wrapper {
+        height: calc(100vh - 75px);
         width: 100%;
-    }
-    .sidebar {
-        width: 400px;
-        min-width: 400px;
-        overflow-y: auto;
-        background: #f8f9fa;
-        padding: 1rem;
-        border-right: 1px solid #ddd;
-        z-index: 10;
-        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-    }
-    .map-container {
-        flex-grow: 1;
         position: relative;
     }
     #map {
-        width: 100%;
         height: 100%;
+        width: 100%;
+        min-height: 500px;
+        background-color: #e9ecef;
+    }
+    .sidebar-scroll {
+        height: calc(100vh - 75px);
+        overflow-y: auto;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        padding: 1.5rem;
     }
     .place-card {
+        border: none;
+        border-radius: 12px;
         transition: transform 0.2s, box-shadow 0.2s;
         cursor: pointer;
+        background: #ffffff;
     }
     .place-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1) !important;
     }
 </style>
 
-<div class="split-container">
-    <!-- Left Sidebar: List of Places -->
-    <div class="sidebar" id="sidebar-content">
-        <h4 class="mb-3"><i class="fas fa-cut text-primary"></i> Barbearias Locais</h4>
-        <div id="loading-spinner" class="text-center my-4 d-none">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+<div class="container-fluid p-0">
+    <div class="row g-0">
+        <div class="col-md-4 sidebar-scroll" id="sidebar-content">
+            <h4 class="mb-4 fw-bold"><i class="fas fa-motorcycle text-success me-2"></i> Uber Barber</h4>
+            
+            <div class="card shadow-sm border-0 mb-4 rounded-3">
+                <div class="card-body bg-white rounded-3">
+                    <label class="form-label fw-semibold small text-muted">Insira a sua morada para entrega ao domicílio (Estilo Uber)</label>
+                    <div class="input-group">
+                        <input type="text" id="deliveryAddress" class="form-control bg-light border-0" placeholder="A sua morada...">
+                        <button class="btn btn-dark px-4" id="btnCalculateDelivery"><i class="fas fa-search"></i></button>
+                    </div>
+                    <small class="text-muted d-none mt-2 d-block" id="deliveryCalculatedText"><i class="fas fa-spinner fa-spin me-1"></i> A obter coordenadas...</small>
+                </div>
             </div>
-            <p class="mt-2 text-muted">A pesquisar locais na área...</p>
-        </div>
-        <div id="places-list" class="d-flex flex-column gap-3">
-            <p class="text-muted text-center my-5">Mova o mapa para ver as barbearias e salões perto de si.</p>
-        </div>
-    </div>
 
-    <!-- Right Side: Google Map -->
-    <div class="map-container">
-        <div id="map"></div>
+            <div id="loading-spinner" class="text-center my-5 d-none">
+                <div class="spinner-border text-success" role="status"></div>
+                <p class="mt-2 text-muted fw-medium">A procurar profissionais na área...</p>
+            </div>
+            
+            <div id="places-list" class="d-flex flex-column pb-4">
+                <p class="text-muted text-center my-5"><i class="fas fa-map-marker-alt fa-2x mb-3 text-light"></i><br/>Mova o mapa para ver as barbearias perto de si.</p>
+            </div>
+        </div>
+
+        <div class="col-md-8 map-wrapper">
+            <div id="map"></div>
+        </div>
     </div>
 </div>
 
-<!-- Place Details Modal -->
 <div class="modal fade" id="placeModal" tabindex="-1" aria-labelledby="placeModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="placeModalLabel">Detalhes do Local</h5>
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white border-0">
+        <h5 class="modal-title fw-bold" id="placeModalLabel">Detalhes do Local</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body" id="placeModalBody">
           <div class="text-center py-5" id="modal-loading">
-              <div class="spinner-border text-primary" role="status"></div>
+              <div class="spinner-border text-success" role="status"></div>
               <p class="mt-2 text-muted">A carregar detalhes ao vivo...</p>
           </div>
-          <div id="modal-content" class="d-none">
-              <!-- Content injected via JS -->
-          </div>
+          <div id="modal-content" class="d-none"></div>
       </div>
     </div>
   </div>
@@ -88,35 +94,100 @@
         let map;
         let markers = [];
         let modalInstance;
+        let currentPlaces = [];
+        let userDeliveryLat = null;
+        let userDeliveryLng = null;
 
         function initMap() {
-            // Setup Modal
             const modalEl = document.getElementById('placeModal');
             if (modalEl && typeof bootstrap !== 'undefined') {
                 modalInstance = new bootstrap.Modal(modalEl);
             }
 
-            // Init Map strictly at Zoom 14 in Lisbon area
-            map = new google.maps.Map(document.getElementById('map'), {
+            const mapEl = document.getElementById('map');
+            if (!mapEl) return;
+
+            map = new google.maps.Map(mapEl, {
                 zoom: 14,
-                center: { lat: 38.7223, lng: -9.1393 }, // Lisbon area
+                center: { lat: 38.7223, lng: -9.1393 }, 
                 mapTypeControl: false,
                 streetViewControl: false,
                 clickableIcons: false
             });
 
-            // Fetch live data on map idle (panning/zooming stops)
             map.addListener('idle', () => {
                 fetchLiveMarkers();
             });
+
+            // Bind the calculation event only after Google Maps has completely loaded
+            const btnCalculate = document.getElementById('btnCalculateDelivery');
+            if (btnCalculate) {
+                btnCalculate.addEventListener('click', handleCalculateClick);
+            }
+        }
+
+        function handleCalculateClick() {
+            if (typeof google === 'undefined') {
+                console.error("Google Maps API not loaded yet.");
+                return;
+            }
+
+            const address = document.getElementById('deliveryAddress').value;
+            if (!address) {
+                userDeliveryLat = null;
+                userDeliveryLng = null;
+                if (currentPlaces.length > 0) renderData(currentPlaces);
+                return;
+            }
+            
+            const calcText = document.getElementById('deliveryCalculatedText');
+            calcText.classList.remove('d-none');
+            calcText.classList.remove('text-danger');
+            calcText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> A obter coordenadas...';
+
+            const fallbackToMapCenter = () => {
+                calcText.classList.add('text-danger');
+                calcText.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro na morada. A usar o centro do ecrã como referência.';
+                if (map) {
+                    const center = map.getCenter();
+                    userDeliveryLat = center.lat();
+                    userDeliveryLng = center.lng();
+                } else {
+                    userDeliveryLat = 38.7223; 
+                    userDeliveryLng = -9.1393;
+                }
+                if (currentPlaces.length > 0) renderData(currentPlaces);
+            };
+
+            try {
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ address: address }, (results, status) => {
+                    if (status === 'OK' && results && results.length > 0) {
+                        userDeliveryLat = results[0].geometry.location.lat();
+                        userDeliveryLng = results[0].geometry.location.lng();
+                        
+                        calcText.classList.remove('text-danger');
+                        calcText.classList.add('text-success');
+                        calcText.innerHTML = `<i class="fas fa-check-circle me-1"></i> Taxas calculadas para: <span class="fw-bold">${escapeHtml(results[0].formatted_address)}</span>`;
+                        
+                        if (currentPlaces.length > 0) {
+                            renderData(currentPlaces);
+                        }
+                    } else {
+                        fallbackToMapCenter();
+                    }
+                });
+            } catch (e) {
+                fallbackToMapCenter();
+            }
         }
 
         async function fetchLiveMarkers() {
+            if (!map) return;
             const center = map.getCenter();
             const lat = center.lat();
             const lng = center.lng();
             
-            // Calculate a rough radius based on zoom level, max 50km
             const zoom = map.getZoom();
             let radius = Math.floor(40000000 / Math.pow(2, zoom));
             radius = Math.min(Math.max(radius, 500), 50000);
@@ -126,20 +197,19 @@
 
             try {
                 const response = await fetch(`/Barbershops/GetLiveMarkers?lat=${lat}&lng=${lng}&radius=${radius}`);
-                if (!response.ok) throw new Error('Network response was not ok');
+                if (!response.ok) throw new Error('Network response error');
                 const places = await response.json();
                 
-                renderData(places);
+                currentPlaces = places;
+                renderData(currentPlaces);
             } catch (error) {
-                console.error("Error fetching live markers:", error);
-                document.getElementById('places-list').innerHTML = '<p class="text-danger text-center">Erro ao carregar os dados.</p>';
+                document.getElementById('places-list').innerHTML = '<div class="alert alert-danger border-0 shadow-sm text-center">Erro ao carregar os dados.</div>';
             } finally {
                 document.getElementById('loading-spinner').classList.add('d-none');
             }
         }
 
         function renderData(places) {
-            // Clear existing markers
             markers.forEach(m => m.setMap(null));
             markers = [];
 
@@ -147,12 +217,11 @@
             listContainer.innerHTML = '';
 
             if (!places || places.length === 0) {
-                listContainer.innerHTML = '<p class="text-muted text-center my-5">Nenhuma barbearia encontrada nesta área.</p>';
+                listContainer.innerHTML = '<div class="alert alert-light text-center border-0 text-muted my-3">Nenhuma barbearia encontrada nesta área.</div>';
                 return;
             }
 
             places.forEach(place => {
-                // Render Map Marker
                 const marker = new google.maps.Marker({
                     position: { lat: place.lat, lng: place.lng },
                     map: map,
@@ -165,7 +234,7 @@
                     },
                     icon: {
                         path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: '#0d6efd',
+                        fillColor: '#198754',
                         fillOpacity: 1,
                         strokeColor: '#fff',
                         strokeWeight: 2,
@@ -176,12 +245,10 @@
                 marker.addListener('click', () => {
                     openPlaceDetails(place.placeId);
                 });
-
                 markers.push(marker);
 
-                // Render Sidebar Card
                 const card = document.createElement('div');
-                card.className = 'card shadow-sm place-card';
+                card.className = 'card shadow-sm place-card mb-3 border-0';
                 card.onclick = () => {
                     map.panTo({ lat: place.lat, lng: place.lng });
                     openPlaceDetails(place.placeId);
@@ -189,21 +256,109 @@
                 
                 const starsHtml = renderStars(place.rating);
 
-                card.innerHTML = `
-                    <div class="card-body">
-                        <h6 class="card-title fw-bold text-primary mb-1">${escapeHtml(place.name)}</h6>
-                        <p class="card-text small text-muted mb-2"><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(place.address)}</p>
-                        <div class="d-flex align-items-center">
-                            <span class="me-2">${starsHtml}</span>
-                            <span class="small fw-semibold">${place.rating ? place.rating.toFixed(1) : '-'}</span>
-                            <span class="small text-muted ms-1">(${place.userRatingsTotal || 0})</span>
+                let distanceHtml = '';
+                let priceHtml = '';
+                let actionHtml = '';
+
+                let distanceKm = 0;
+                let hasValidUserLocation = false;
+
+                if (userDeliveryLat !== null && userDeliveryLng !== null) {
+                    try {
+                        distanceKm = getDistanceFromLatLonInKm(userDeliveryLat, userDeliveryLng, place.lat, place.lng);
+                        if (isNaN(distanceKm) || distanceKm === null) {
+                            distanceKm = 0;
+                        } else {
+                            hasValidUserLocation = true;
+                        }
+                    } catch (err) {
+                        distanceKm = 0;
+                    }
+                }
+
+                if (hasValidUserLocation) {
+                    const basePrice = 15.00;
+                    const deliveryFee = distanceKm * 0.50;
+                    const totalPrice = basePrice + deliveryFee;
+                    
+                    distanceHtml = `<p class="mb-2 text-success small fw-bold"><i class="fas fa-route me-1"></i>A ${distanceKm.toFixed(1)} km de si</p>`;
+                    priceHtml = `
+                        <div class="mt-3 bg-light p-3 rounded-3 small">
+                            <div class="d-flex justify-content-between mb-1 text-muted"><span>Corte Base:</span> <span>€${basePrice.toFixed(2)}</span></div>
+                            <div class="d-flex justify-content-between mb-2 text-muted"><span>Taxa Entrega:</span> <span>€${deliveryFee.toFixed(2)}</span></div>
+                            <div class="d-flex justify-content-between fw-bold pt-2 border-top border-dark border-opacity-10"><span>Total Estimado:</span> <span>€${totalPrice.toFixed(2)}</span></div>
                         </div>
+                    `;
+                    
+                    const deliveryNotes = `Taxa de Entrega: €${deliveryFee.toFixed(2)} (Distância: ${distanceKm.toFixed(1)} km).`;
+                    const safeName = place.name ? place.name : 'Barbearia';
+                    const finalUrl = `/Bookings/Create?barbershopId=0&shopName=${encodeURIComponent(safeName)}&Notes=${encodeURIComponent(deliveryNotes)}`;
+
+                    actionHtml = `
+                        <div class="mt-3">
+                            <a href="${finalUrl}" class="btn btn-success w-100 fw-medium shadow-sm py-2" onclick="event.stopPropagation();">
+                                <i class="fas fa-motorcycle me-2"></i> Solicitar ao Domicílio
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    const safeName = place.name ? place.name : 'Barbearia';
+                    const finalUrl = `/Bookings/Create?barbershopId=0&shopName=${encodeURIComponent(safeName)}&Notes=Sem+Morada+Fornecida`;
+                    actionHtml = `
+                        <div class="mt-3">
+                            <a href="${finalUrl}" class="btn btn-outline-success w-100 fw-medium shadow-sm py-2" onclick="event.stopPropagation();">
+                                <i class="fas fa-calendar-alt me-2"></i> Agendar Serviço
+                            </a>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="card-body p-4 d-flex flex-column h-100">
+                        <div class="mb-auto">
+                            <h5 class="card-title fw-bold text-dark mb-2">${escapeHtml(place.name)}</h5>
+                            <p class="card-text small text-muted mb-2"><i class="fas fa-map-marker-alt me-2 text-danger"></i>${escapeHtml(place.address)}</p>
+                            ${distanceHtml}
+                            <div class="d-flex align-items-center mb-1">
+                                <span class="me-2">${starsHtml}</span>
+                                <span class="small fw-bold">${place.rating ? place.rating.toFixed(1) : 'Novo'}</span>
+                                <span class="small text-muted ms-1">(${place.userRatingsTotal || 0})</span>
+                            </div>
+                        </div>
+                        ${priceHtml}
+                        ${actionHtml}
                     </div>
                 `;
                 listContainer.appendChild(card);
             });
         }
 
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.toString()
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c; 
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI/180)
+        }
+        
         async function openPlaceDetails(placeId) {
             if (!placeId) return;
             if (modalInstance) modalInstance.show();
@@ -212,7 +367,6 @@
             document.getElementById('modal-content').classList.add('d-none');
 
             try {
-                // Call the existing PlaceDetails endpoint to get full live info
                 const response = await fetch(`/Barbershops/PlaceDetails?placeId=${encodeURIComponent(placeId)}`);
                 if (!response.ok) throw new Error('Failed to fetch details');
                 
@@ -221,9 +375,8 @@
 
                 populateModal(data);
             } catch (error) {
-                console.error("Error fetching place details:", error);
                 document.getElementById('modal-loading').classList.add('d-none');
-                document.getElementById('modal-content').innerHTML = '<div class="alert alert-danger">Erro ao carregar detalhes deste local.</div>';
+                document.getElementById('modal-content').innerHTML = '<div class="alert alert-danger border-0">Erro ao carregar detalhes deste local.</div>';
                 document.getElementById('modal-content').classList.remove('d-none');
             }
         }
@@ -306,7 +459,7 @@
         }
 
         function renderStars(rating) {
-            if (!rating) return '<span class="text-muted">Sem avaliações</span>';
+            if (!rating) return '<span class="text-muted small">Sem avaliações</span>';
             let html = '<span class="text-warning">';
             for (let i = 1; i <= 5; i++) {
                 if (i <= Math.floor(rating)) html += '<i class="fas fa-star"></i>';
@@ -316,20 +469,10 @@
             html += '</span>';
             return html;
         }
-
-        function escapeHtml(unsafe) {
-            if (!unsafe) return '';
-            return unsafe.toString()
-                 .replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-        }
     </script>
-    
+
     @if (!string.IsNullOrWhiteSpace(googleApiKey))
     {
-        <script src="https://maps.googleapis.com/maps/api/js?key=@googleApiKey&callback=initMap" async defer></script>
+        <script src="https://maps.googleapis.com/maps/api/js?key=@googleApiKey&libraries=places,geometry&callback=initMap" async defer></script>
     }
 }

@@ -34,11 +34,20 @@ namespace WebApplication1.Controllers
             return View(bookings);
         }
 
-        // ── GET: /Bookings/Create?barbershopId={id} ────────────────────────────
-        public async Task<IActionResult> Create(int? barbershopId)
+        // ── GET: /Bookings/Create?barbershopId={id}&shopName={name}&Notes={notes} ──
+        public async Task<IActionResult> Create(int barbershopId, string? shopName, string? Notes)
         {
-            if (barbershopId == null)
-                return NotFound();
+            if (barbershopId == 0)
+            {
+                var externalVm = new AppointmentCreateViewModel
+                {
+                    BarbershopId = 0,
+                    Barbershop = new Barbershop { Name = shopName ?? "Serviço ao Domicílio", Address = "Localização Externa", IsActive = true },
+                    Notes = Notes,
+                    AvailableServices = new List<Service>()
+                };
+                return View(externalVm);
+            }
 
             var barbershop = await _context.Barbershops
                 .Include(b => b.Services)
@@ -51,7 +60,8 @@ namespace WebApplication1.Controllers
             {
                 BarbershopId = barbershop.Id,
                 Barbershop = barbershop,
-                AvailableServices = barbershop.Services.Where(s => s.IsAvailable).ToList()
+                AvailableServices = barbershop.Services.Where(s => s.IsAvailable).ToList(),
+                Notes = Notes
             };
 
             return View(vm);
@@ -60,24 +70,35 @@ namespace WebApplication1.Controllers
         // ── POST: /Bookings/Create ─────────────────────────────────────────────
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(AppointmentCreateViewModel vm)
+        public async Task<IActionResult> Create(AppointmentCreateViewModel vm, [FromForm] string? shopName)
         {
-            // Reload barbershop for display and additional validation
-            var barbershop = await _context.Barbershops
-                .Include(b => b.Services)
-                .FirstOrDefaultAsync(b => b.Id == vm.BarbershopId && b.IsActive);
+            Barbershop? barbershop = null;
 
-            if (barbershop == null)
-                return NotFound();
+            if (vm.BarbershopId == 0)
+            {
+                barbershop = new Barbershop { Name = shopName ?? "Serviço ao Domicílio", Address = "Localização Externa", IsActive = true };
+                vm.Barbershop = barbershop;
+                vm.AvailableServices = new List<Service>();
+            }
+            else
+            {
+                // Reload barbershop for display and additional validation
+                barbershop = await _context.Barbershops
+                    .Include(b => b.Services)
+                    .FirstOrDefaultAsync(b => b.Id == vm.BarbershopId && b.IsActive);
 
-            vm.Barbershop = barbershop;
-            vm.AvailableServices = barbershop.Services.Where(s => s.IsAvailable).ToList();
+                if (barbershop == null)
+                    return NotFound();
+
+                vm.Barbershop = barbershop;
+                vm.AvailableServices = barbershop.Services.Where(s => s.IsAvailable).ToList();
+            }
 
             // ── Additional custom validation ───────────────────────────────────
             if (vm.BookingDate.Date < DateTime.Today.AddDays(1))
                 ModelState.AddModelError(nameof(vm.BookingDate), "A data da reserva deve ser a partir de amanhã.");
 
-            if (vm.IsOnSite && vm.ServiceId.HasValue)
+            if (vm.IsOnSite && vm.ServiceId.HasValue && barbershop.Services != null)
             {
                 var selectedService = barbershop.Services.FirstOrDefault(s => s.Id == vm.ServiceId);
                 if (selectedService != null && !selectedService.IsMobile)
@@ -106,7 +127,7 @@ namespace WebApplication1.Controllers
             };
 
             // ── Compute travel fee if home service requested ───────────────────
-            if (booking.IsOnSite && vm.UserLat.HasValue && vm.UserLng.HasValue)
+            if (booking.IsOnSite && vm.UserLat.HasValue && vm.UserLng.HasValue && vm.BarbershopId != 0)
             {
                 var dist = HaversineDistance(vm.UserLat.Value, vm.UserLng.Value, barbershop.Latitude, barbershop.Longitude);
                 booking.TravelDistanceKm = Math.Round(dist, 2);
