@@ -1,13 +1,24 @@
 @model IEnumerable<WebApplication1.Models.Booking>
 
 @{
-    ViewData["Title"] = "Minhas Reservas";
+    ViewData["Title"] = "Reservas Uber Barber";
 }
 
 <div class="container my-5">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h1 class="section-title"><i class="fas fa-calendar-check"></i> Minhas Reservas</h1>
+    @* TempData feedback alerts *@
+    <partial name="_NotificationAlerts" />
+
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h1 class="section-title mb-0">
+                <i class="fas fa-calendar-check me-2"></i>Reservas Uber Barber
+            </h1>
+        </div>
+        <div class="col-auto">
+            <a asp-controller="Barbershops" asp-action="Index"
+               class="btn btn-primary btn-lg rounded-pill shadow-sm">
+                <i class="fas fa-plus me-2"></i>Nova Reserva
+            </a>
         </div>
     </div>
 
@@ -22,7 +33,15 @@
                             <div class="row align-items-center">
                                 <div class="col-md-8">
                                     <h5 class="card-title">
-                                        <i class="fas fa-store text-accent"></i> @booking.Barbershop.Name
+                                        <i class="fas fa-store text-accent"></i> 
+                                        @if (booking.Barbershop != null)
+                                        {
+                                            @booking.Barbershop.Name
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info">Atendimento ao Domicílio</span>
+                                        }
                                     </h5>
                                     <p class="mb-2">
                                         <i class="fas fa-calendar text-accent"></i> 
@@ -52,22 +71,22 @@
                                         @switch (booking.Status)
                                         {
                                             case BookingStatus.Pending:
-                                                <span class="badge badge-warning">
+                                                <span class="badge bg-warning text-dark">
                                                     <i class="fas fa-hourglass-half"></i> Pendente
                                                 </span>
                                                 break;
                                             case BookingStatus.Confirmed:
-                                                <span class="badge badge-success">
+                                                <span class="badge bg-success">
                                                     <i class="fas fa-check-circle"></i> Confirmada
                                                 </span>
                                                 break;
                                             case BookingStatus.Cancelled:
-                                                <span class="badge badge-danger">
+                                                <span class="badge bg-danger">
                                                     <i class="fas fa-times-circle"></i> Cancelada
                                                 </span>
                                                 break;
                                             case BookingStatus.Completed:
-                                                <span class="badge badge-info">
+                                                <span class="badge bg-secondary">
                                                     <i class="fas fa-flag-checkered"></i> Concluída
                                                 </span>
                                                 break;

@@ -92,6 +92,14 @@ namespace WebApplication1.Controllers
                 }).ToList() ?? new List<PlaceReviewViewModel>()
             };
 
+            // Check if favorited by current user
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var userId = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+                viewModel.IsFavourited = await _context.FavoriteBarbershops
+                    .AnyAsync(f => f.UserId == userId && f.BarbershopId == barbershop.Id);
+            }
+
             return View(viewModel);
         }
 

@@ -15,6 +15,11 @@
         </a>
     </li>
     <li class="nav-item">
+        <a class="nav-link text-danger fw-medium" asp-controller="Favorites" asp-action="Index">
+            <i class="fas fa-heart"></i> Favoritos
+        </a>
+    </li>
+    <li class="nav-item">
         <form class="form-inline" asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="@Url.Action("Index", "Home", new { area = "" })">
             <button type="submit" class="nav-link btn btn-link">
                 <i class="fas fa-sign-out-alt"></i> Sair

@@ -1,0 +1,137 @@
+@model IEnumerable<WebApplication1.Models.ViewModels.FavoriteListViewModel>
+
+@{
+    ViewData["Title"] = "Meus Favoritos";
+}
+
+<div class="container my-5">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h2 class="fw-bold"><i class="fas fa-heart text-danger me-2"></i> @ViewData["Title"]</h2>
+            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="fas fa-search me-2"></i> Explorar Barbearias
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow-sm border-0 bg-light text-center py-5 rounded-4">
+                    <div class="card-body">
+                        <i class="far fa-folder-open fa-4x text-muted mb-3"></i>
+                        <h4 class="fw-bold">Ainda não tens favoritos!</h4>
+                        <p class="text-secondary mb-4">Guarda as tuas barbearias preferidas para acederes a elas rapidamente.</p>
+                        <a asp-controller="Home" asp-action="Index" class="btn btn-primary rounded-pill px-4 shadow-sm">
+                            Descobrir Barbearias
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var item in Model)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0 rounded-4 overflow-hidden position-relative transition-hover">
+                        
+                        <!-- Remove Favorite Button (Absolute positioned top-right) -->
+                        @if (!string.IsNullOrEmpty(item.PlaceId))
+                        {
+                            <form method="post" action="/Favorites/RemovePlace" class="position-absolute" style="top: 15px; right: 15px; z-index: 10;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="placeId" value="@item.PlaceId" />
+                                <button type="submit" class="btn btn-light rounded-circle shadow-sm" style="width: 40px; height: 40px; padding: 0; color: #dc3545;" title="Remover dos Favoritos" onclick="return confirm('Tens a certeza que desejas remover esta barbearia dos favoritos?');">
+                                    <i class="fas fa-heart fs-5"></i>
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <form method="post" action="/Favorites/Remove" class="position-absolute" style="top: 15px; right: 15px; z-index: 10;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="barbershopId" value="@item.BarbershopId" />
+                                <button type="submit" class="btn btn-light rounded-circle shadow-sm" style="width: 40px; height: 40px; padding: 0; color: #dc3545;" title="Remover dos Favoritos" onclick="return confirm('Tens a certeza que desejas remover esta barbearia dos favoritos?');">
+                                    <i class="fas fa-heart fs-5"></i>
+                                </button>
+                            </form>
+                        }
+
+                        <!-- Barbershop Image Thumbnail -->
+                        <div style="height: 200px; overflow: hidden;" class="bg-light">
+                            @if (!string.IsNullOrEmpty(item.ImageUrl))
+                            {
+                                <img src="@item.ImageUrl" class="w-100 h-100 object-fit-cover" alt="@item.Name" />
+                            }
+                            else
+                            {
+                                <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                                    <i class="fas fa-store fa-4x opacity-50"></i>
+                                </div>
+                            }
+                        </div>
+                        
+                        <div class="card-body p-4 d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title fw-bold text-dark mb-0 text-truncate" title="@item.Name">
+                                    @item.Name
+                                </h5>
+                            </div>
+                            
+                            <p class="card-text text-secondary small mb-3 text-truncate" title="@item.Address">
+                                <i class="fas fa-map-marker-alt text-muted me-1"></i> @item.Address
+                            </p>
+                            
+                            <div class="d-flex align-items-center mb-4">
+                                @if (item.GoogleRating.HasValue)
+                                {
+                                    <div class="text-warning me-2 fs-6">
+                                        <i class="fas fa-star"></i>
+                                    </div>
+                                    <span class="fw-bold me-1">@item.GoogleRating.Value.ToString("0.0")</span>
+                                    <span class="text-muted small">(@item.UserRatingsTotal)</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small fst-italic">Sem avaliações</span>
+                                }
+                            </div>
+                            
+                            <div class="mt-auto d-grid">
+                                @if (!string.IsNullOrEmpty(item.PlaceId))
+                                {
+                                    <a href="/Provider/Details/@item.PlaceId" class="btn btn-outline-primary rounded-pill">
+                                        Ver Detalhes
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a asp-controller="Barbershops" asp-action="Details" asp-route-id="@item.BarbershopId" class="btn btn-outline-primary rounded-pill">
+                                        Ver Detalhes
+                                    </a>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .transition-hover {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .transition-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+    }
+    .object-fit-cover {
+        object-fit: cover;
+    }
+</style>

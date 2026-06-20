@@ -16,6 +16,7 @@ namespace WebApplication1.Data
         public DbSet<Booking> Bookings { get; set; }
         public DbSet<CachedGoogleReview> CachedGoogleReviews { get; set; }
         public DbSet<FavouritePlace> FavouritePlaces { get; set; }
+        public DbSet<FavoriteBarbershop> FavoriteBarbershops { get; set; }
         
 
         
@@ -24,6 +25,10 @@ namespace WebApplication1.Data
             base.OnModelCreating(builder);
             
             // Configure relationships and constraints
+            
+            builder.Entity<FavoriteBarbershop>()
+                .HasIndex(f => new { f.UserId, f.BarbershopId })
+                .IsUnique();
                 
             builder.Entity<Booking>()
                 .HasOne(b => b.User)

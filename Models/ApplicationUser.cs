@@ -11,5 +11,6 @@ namespace WebApplication1.Models
         
         // Navigation property
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
+        public virtual ICollection<FavoriteBarbershop> FavoriteBarbershops { get; set; } = new List<FavoriteBarbershop>();
     }
 }

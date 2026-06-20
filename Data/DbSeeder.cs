@@ -170,6 +170,110 @@ namespace WebApplication1.Data
 
             context.Services.AddRange(serviceSeeds);
             await context.SaveChangesAsync();
+
+            // ── Seed Favorite Barbershops ────────────────────────────────────────────
+            var existingSampleUser = await userManager.FindByEmailAsync("joao@example.com");
+            if (existingSampleUser != null && !await context.FavoriteBarbershops.AnyAsync())
+            {
+                var firstShop = savedShops.FirstOrDefault();
+                if (firstShop != null)
+                {
+                    context.FavoriteBarbershops.Add(new FavoriteBarbershop
+                    {
+                        UserId = existingSampleUser.Id,
+                        BarbershopId = firstShop.Id,
+                        CreatedAt = DateTime.Now
+                    });
+                    await context.SaveChangesAsync();
+                }
+            }
+
+            // ── Seed Demo Bookings ───────────────────────────────────────────────────
+            // Seeds three bookings for joao@example.com demonstrating that the system
+            // permits multiple reservations regardless of Pending / Cancelled status.
+            // Guard: only runs if no bookings exist yet (idempotent across restarts).
+            if (existingSampleUser != null && !await context.Bookings.AnyAsync())
+            {
+                var shops        = await context.Barbershops.ToListAsync();
+                var services     = await context.Services.ToListAsync();
+                var shop1        = shops.ElementAtOrDefault(0);
+                var shop2        = shops.ElementAtOrDefault(1);
+                var shop3        = shops.ElementAtOrDefault(2);
+                var svc1         = services.FirstOrDefault(s => s.BarbershopId == shop1?.Id);
+                var svc2         = services.FirstOrDefault(s => s.BarbershopId == shop2?.Id);
+
+                var bookingSeeds = new List<Booking>();
+
+                // 1. Completed booking – past date, shop 1
+                if (shop1 != null)
+                {
+                    bookingSeeds.Add(new Booking
+                    {
+                        UserId      = existingSampleUser.Id,
+                        BarbershopId = shop1.Id,
+                        ServiceId   = svc1?.Id,
+                        BookingDate = DateTime.Today.AddDays(-7),
+                        BookingTime = new TimeSpan(10, 0, 0),
+                        Status      = BookingStatus.Completed,
+                        Notes       = "Reserva demo concluída.",
+                        IsOnSite    = false,
+                        CreatedAt   = DateTime.Now.AddDays(-8)
+                    });
+                }
+
+                // 2. Cancelled booking – recent past, shop 2
+                if (shop2 != null)
+                {
+                    bookingSeeds.Add(new Booking
+                    {
+                        UserId       = existingSampleUser.Id,
+                        BarbershopId = shop2.Id,
+                        ServiceId    = svc2?.Id,
+                        BookingDate  = DateTime.Today.AddDays(-3),
+                        BookingTime  = new TimeSpan(14, 30, 0),
+                        Status       = BookingStatus.Cancelled,
+                        Notes        = "Reserva cancelada pelo utilizador.",
+                        IsOnSite     = false,
+                        CreatedAt    = DateTime.Now.AddDays(-5)
+                    });
+                }
+
+                // 3. Pending booking – future date, shop 1 (proves multiple Pending allowed)
+                if (shop1 != null)
+                {
+                    bookingSeeds.Add(new Booking
+                    {
+                        UserId       = existingSampleUser.Id,
+                        BarbershopId = shop1.Id,
+                        ServiceId    = svc1?.Id,
+                        BookingDate  = DateTime.Today.AddDays(3),
+                        BookingTime  = new TimeSpan(11, 0, 0),
+                        Status       = BookingStatus.Pending,
+                        Notes        = "Reserva Uber Barber — aguarda confirmação.",
+                        IsOnSite     = false,
+                        CreatedAt    = DateTime.Now
+                    });
+                }
+
+                // 4. Home-service (Domicílio) booking — BarbershopId null, external Google Places proxy
+                bookingSeeds.Add(new Booking
+                {
+                    UserId       = existingSampleUser.Id,
+                    BarbershopId = null,   // intentionally null: external/home-service booking
+                    ServiceId    = null,
+                    BookingDate  = DateTime.Today.AddDays(5),
+                    BookingTime  = new TimeSpan(9, 0, 0),
+                    Status       = BookingStatus.Pending,
+                    Notes        = "[Serviço ao Domicílio (Uber-Style)] Morada: Rua da Glória 5, Lisboa | Local/Profissional: BarberLoc Mobile",
+                    IsOnSite     = true,
+                    TravelDistanceKm = 3.4,
+                    TravelFee    = 7.55m,
+                    CreatedAt    = DateTime.Now
+                });
+
+                context.Bookings.AddRange(bookingSeeds);
+                await context.SaveChangesAsync();
+            }
         }
     }
 }

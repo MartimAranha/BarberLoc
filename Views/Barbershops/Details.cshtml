@@ -59,7 +59,19 @@
             <div class="card shadow-custom border-0 h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h1 class="card-title fw-bold mb-0">@Model.Name</h1>
+                        <div class="d-flex align-items-center">
+                            <h1 class="card-title fw-bold mb-0 me-3">@Model.Name</h1>
+                            @if (User.Identity?.IsAuthenticated == true)
+                            {
+                                <form id="form-favorite-toggle" method="post" action="@(Model.IsFavourited ? "/Favorites/Remove" : "/Favorites/Add")" class="d-inline m-0 p-0">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="barbershopId" value="@Model.Id" />
+                                    <button type="button" id="btn-favorite-toggle" class="btn btn-link p-0 m-0 border-0 text-decoration-none" style="font-size: 1.8rem; color: @(Model.IsFavourited ? "#dc3545" : "#6c757d");" title="@(Model.IsFavourited ? "Remover dos Favoritos" : "Adicionar aos Favoritos")">
+                                        <i class="@(Model.IsFavourited ? "fas fa-heart" : "far fa-heart")"></i>
+                                    </button>
+                                </form>
+                            }
+                        </div>
                         @if (Model.IsOpenNow.HasValue)
                         {
                             if (Model.IsOpenNow.Value)
@@ -151,11 +163,21 @@
 
 
 
-                    <div class="d-grid gap-2 d-md-flex mt-auto">
+                    <div class="d-flex flex-wrap gap-2 mt-auto">
                         <a id="btn-fazer-reserva" asp-controller="Bookings" asp-action="Create" asp-route-barbershopId="@Model.Id" 
                            class="btn btn-primary btn-lg flex-fill rounded-pill shadow-sm">
                             <i class="fas fa-calendar-plus me-2"></i> Fazer Reserva
                         </a>
+                        <a href="https://www.google.com/maps/search/?api=1&query=@Uri.EscapeDataString(Model.Name ?? Model.Address ?? "")" 
+                           target="_blank" rel="noopener noreferrer"
+                           class="btn btn-outline-secondary btn-lg flex-fill rounded-pill shadow-sm">
+                            <i class="fab fa-google me-2"></i> Ver no Google Maps
+                        </a>
+                        <button id="btn-favoritos" class="btn btn-outline-dark btn-lg flex-fill rounded-pill shadow-sm" type="button" onclick="toggleFavoritosHeader(this)">
+                            <i id="heart-icon" class="far fa-heart me-2"></i><span id="favoritos-text">Favoritos</span>
+                        </button>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
                         <button type="button" id="btn-details-directions"
                                 class="btn btn-outline-secondary btn-lg flex-fill rounded-pill shadow-sm"
                                 onclick="toggleDetailsDirections()">
@@ -547,6 +569,155 @@
                     // Reset to the original server-rendered href (no stale notes)
                     mainReservaBtn.href = `/Bookings/Create?barbershopId=${encodeURIComponent(shopId)}&shopName=${encodeURIComponent(shopName)}`;
                 }
+            }
+        });
+
+        // ── Favorites AJAX Toggle ──
+        const favBtn = document.getElementById('btn-favorite-toggle');
+        if(favBtn) {
+            favBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const form = document.getElementById('form-favorite-toggle');
+                const url = form.getAttribute('action');
+                const formData = new FormData(form);
+
+                fetch(url, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if(data.success) {
+                        const icon = favBtn.querySelector('i');
+                        if(data.isFavorited) {
+                            icon.classList.remove('far');
+                            icon.classList.add('fas');
+                            favBtn.style.color = '#dc3545';
+                            form.setAttribute('action', '/Favorites/Remove');
+                            favBtn.setAttribute('title', 'Remover dos Favoritos');
+                        } else {
+                            icon.classList.remove('fas');
+                            icon.classList.add('far');
+                            favBtn.style.color = '#6c757d';
+                            form.setAttribute('action', '/Favorites/Add');
+                            favBtn.setAttribute('title', 'Adicionar aos Favoritos');
+                        }
+                    }
+                })
+                .catch(err => console.error("Error toggling favorite", err));
+            });
+        }
+
+        // ── Favoritos Header Button (PAP Demo) ──
+        var _favHeaderActive = @(Model.IsFavourited ? "true" : "false");
+
+        // Toast helper
+        function showFavToast(msg, color) {
+            var existing = document.getElementById('fav-toast-banner');
+            if (existing) existing.remove();
+
+            var toast = document.createElement('div');
+            toast.id = 'fav-toast-banner';
+            toast.style.cssText = [
+                'position:fixed', 'bottom:28px', 'left:50%', 'transform:translateX(-50%) translateY(60px)',
+                'background:' + color, 'color:#fff', 'padding:14px 28px', 'border-radius:50px',
+                'font-size:1rem', 'font-weight:600', 'z-index:9999',
+                'box-shadow:0 8px 30px rgba(0,0,0,0.25)',
+                'display:flex', 'align-items:center', 'gap:10px',
+                'transition:transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.35s ease',
+                'opacity:0', 'pointer-events:none'
+            ].join(';');
+            toast.innerHTML = msg;
+            document.body.appendChild(toast);
+
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    toast.style.transform = 'translateX(-50%) translateY(0)';
+                    toast.style.opacity = '1';
+                });
+            });
+
+            setTimeout(function() {
+                toast.style.transform = 'translateX(-50%) translateY(60px)';
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 400);
+            }, 2800);
+        }
+
+        function toggleFavoritosHeader(btn) {
+            var icon = document.getElementById('fav-header-icon') || document.getElementById('heart-icon');
+            var smallHeart = document.getElementById('btn-favorite-toggle');
+            var form = document.getElementById('form-favorite-toggle');
+
+            // Enforce login to save favorites
+            if (!form) {
+                window.location.href = '/Identity/Account/Login?ReturnUrl=' + encodeURIComponent(window.location.pathname + window.location.search);
+                return;
+            }
+
+            if (!_favHeaderActive) {
+                // Animate: outline -> filled red
+                icon.classList.remove('far');
+                icon.classList.add('fas');
+                icon.style.color = '#dc3545';
+                btn.classList.remove('btn-outline-dark');
+                btn.classList.add('btn-danger');
+                btn.innerHTML = '<i class="fas fa-heart me-2" id="fav-header-icon" style="color:#fff;"></i> Nos Favoritos';
+                _favHeaderActive = true;
+
+                // Sync the small heart icon too
+                if (smallHeart) {
+                    var si = smallHeart.querySelector('i');
+                    if (si) { si.classList.remove('far'); si.classList.add('fas'); }
+                    smallHeart.style.color = '#dc3545';
+                    if (form) form.setAttribute('action', '/Favorites/Remove');
+                }
+
+                showFavToast('<i class="fas fa-heart" style="color:#ff6b8a;"></i>&nbsp; Adicionado aos Favoritos!', 'linear-gradient(135deg,#1a1a2e,#16213e)');
+
+                // Fire the actual AJAX toggle if the small heart form exists
+                if (form) {
+                    var fd = new FormData(form);
+                    fetch('/Favorites/Add', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .catch(function() {});
+                }
+            } else {
+                // Animate back: filled -> outline
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-outline-dark');
+                btn.innerHTML = '<i class="far fa-heart me-2" id="fav-header-icon"></i> Favoritos';
+                _favHeaderActive = false;
+
+                // Sync the small heart icon
+                if (smallHeart) {
+                    var si2 = smallHeart.querySelector('i');
+                    if (si2) { si2.classList.remove('fas'); si2.classList.add('far'); }
+                    smallHeart.style.color = '#6c757d';
+                    if (form) form.setAttribute('action', '/Favorites/Add');
+                }
+
+                showFavToast('<i class="fas fa-heart-broken"></i>&nbsp; Removido dos Favoritos.', '#6c757d');
+
+                if (form) {
+                    var fd2 = new FormData(form);
+                    fetch('/Favorites/Remove', { method: 'POST', body: fd2, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .catch(function() {});
+                }
+            }
+        }
+
+        // Sync btn-favoritos state on page load if already favourited
+        document.addEventListener('DOMContentLoaded', function() {
+            var favBtn = document.getElementById('btn-favoritos');
+            var favIcon = document.getElementById('heart-icon');
+            var favText = document.getElementById('favoritos-text');
+            if (_favHeaderActive && favBtn && favIcon && favText) {
+                favIcon.className = 'fas fa-heart text-danger me-2';
+                favBtn.className = 'btn btn-danger btn-lg flex-fill rounded-pill shadow-sm';
+                favText.innerText = 'Nos Favoritos';
             }
         });
     </script>

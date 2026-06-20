@@ -20,14 +20,17 @@ namespace WebApplication1.Controllers
             _userManager = userManager;
         }
 
-        // ── GET: /Bookings ─────────────────────────────────────────────────────
+        // ── GET: /Bookings ────────────────────────────────────────────────────────────────────
         public async Task<IActionResult> Index()
         {
             var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return RedirectToAction("Login", "Account", new { area = "Identity" });
+
             var bookings = await _context.Bookings
                 .Include(b => b.Barbershop)
                 .Include(b => b.Service)
-                .Where(b => b.UserId == user!.Id)
+                .Where(b => b.UserId == user.Id)
                 .OrderByDescending(b => b.BookingDate)
                 .ToListAsync();
 
@@ -135,10 +138,11 @@ namespace WebApplication1.Controllers
                 CreatedAt = DateTime.Now
             };
 
-            // ── Compute travel fee if home service requested ───────────────────
+            // ── Compute travel fee if home service requested ─────────────────────────────────────────────
+            // barbershop is guaranteed non-null here: vm.BarbershopId != 0 is in the guard.
             if (booking.IsOnSite && vm.UserLat.HasValue && vm.UserLng.HasValue && vm.BarbershopId != 0)
             {
-                var dist = HaversineDistance(vm.UserLat.Value, vm.UserLng.Value, barbershop.Latitude, barbershop.Longitude);
+                var dist = HaversineDistance(vm.UserLat.Value, vm.UserLng.Value, barbershop!.Latitude, barbershop.Longitude);
                 booking.TravelDistanceKm = Math.Round(dist, 2);
                 booking.TravelFee = Math.Round(5.0m + (decimal)dist * 0.75m, 2);
             }

@@ -19,5 +19,6 @@ namespace WebApplication1.Models.ViewModels
         public List<PlaceReview> Reviews { get; set; } = new();
         public double? Lat { get; set; }
         public double? Lng { get; set; }
+        public bool IsFavourited { get; set; }
     }
 }

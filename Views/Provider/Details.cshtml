@@ -53,7 +53,12 @@
                 </div>
             </div>
 
-            <div class="col-lg-4 d-flex align-items-end justify-content-lg-end mt-4 mt-lg-0">
+            <div class="col-lg-4 d-flex align-items-end justify-content-lg-end mt-4 mt-lg-0 gap-2">
+                <button type="button" id="btn-provider-favorite" class="btn btn-provider-fav @(Model.IsFavourited ? "active-fav" : "")" style="font-size: 13px !important; padding: 6px 14px !important; max-width: 180px; width: auto; font-weight: 500; border-radius: 6px;" onclick="toggleProviderFavorite(this, '@Model.PlaceId', '@Html.Raw((Model.Name ?? "").Replace("'", "\\'"))', '@Html.Raw((Model.FormattedAddress ?? "").Replace("'", "\\'"))')">
+                    <i class="@(Model.IsFavourited ? "fas fa-heart text-danger" : "far fa-heart")" id="provider-fav-icon"></i>
+                    <span id="provider-fav-text">@(Model.IsFavourited ? "Nos Favoritos" : "Favoritos")</span>
+                </button>
+
                 @if (!string.IsNullOrEmpty(Model.GoogleMapsUrl))
                 {
                     <a href="@Model.GoogleMapsUrl" target="_blank" rel="noopener noreferrer"
@@ -64,6 +69,7 @@
                 }
             </div>
         </div>
+        <form id="anti-forgery-form" class="d-none">@Html.AntiForgeryToken()</form>
     </div>
 </div>
 
@@ -73,6 +79,41 @@
 
         @* ── Left Column: Info + Photos + Map ── *@
         <div class="col-lg-7">
+
+            @* Photos Carousel *@
+            @if (Model.Photos != null && Model.Photos.Any())
+            {
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                    <div id="providerPhotosCarousel" class="carousel slide" data-bs-ride="carousel">
+                        <div class="carousel-inner" style="height: 350px;">
+                            @for (var i = 0; i < Model.Photos.Count; i++)
+                            {
+                                var photo = Model.Photos[i];
+                                <div class="carousel-item @(i == 0 ? "active" : "") h-100">
+                                    <img src="@photo.GetProxyUrl()" class="d-block w-100 h-100 object-fit-cover" alt="Foto do local @i" onerror="this.src='https://via.placeholder.com/800x400?text=Sem+Imagem';" />
+                                </div>
+                            }
+                        </div>
+                        @if (Model.Photos.Count > 1)
+                        {
+                            <button class="carousel-control-prev" type="button" data-bs-target="#providerPhotosCarousel" data-bs-slide="prev">
+                                <span class="carousel-control-prev-icon" aria-hidden="true" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></span>
+                                <span class="visually-hidden">Anterior</span>
+                            </button>
+                            <button class="carousel-control-next" type="button" data-bs-target="#providerPhotosCarousel" data-bs-slide="next">
+                                <span class="carousel-control-next-icon" aria-hidden="true" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></span>
+                                <span class="visually-hidden">Próximo</span>
+                            </button>
+                            <div class="carousel-indicators">
+                                @for (var i = 0; i < Model.Photos.Count; i++)
+                                {
+                                    <button type="button" data-bs-target="#providerPhotosCarousel" data-bs-slide-to="@i" class="@(i == 0 ? "active" : "")" aria-current="@(i == 0 ? "true" : "false")" aria-label="Slide @(i+1)"></button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
 
             @* Contact & Info Card *@
             <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -181,7 +222,11 @@
                         {
                             <div class="review-card mb-3 p-3 bg-light rounded-3">
                                 <div class="d-flex align-items-center mb-2">
-                                    <img src="@(review.ProfilePhotoUrl ?? "https://via.placeholder.com/40")" alt="@review.AuthorName" class="rounded-circle me-2" style="width: 40px; height: 40px;" />
+                                    @{
+                                        var defaultName = review.AuthorName ?? "?";
+                                        var avatarUrl = $"https://ui-avatars.com/api/?name={Uri.EscapeDataString(defaultName)}&background=random";
+                                    }
+                                    <img src="@(review.ProfilePhotoUrl ?? "https://via.placeholder.com/40")" alt="@review.AuthorName" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;" onerror="this.onerror=null; this.src='@avatarUrl';" />
                                     <div>
                                         <h6 class="mb-0 fw-bold">@review.AuthorName</h6>
                                         <small class="text-muted">@review.RelativeTimeDescription</small>
@@ -263,6 +308,9 @@
         .review-card {
             border: 1px solid #f1f3f5;
         }
+        .object-fit-cover {
+            object-fit: cover;
+        }
         /* ── Google Maps button — compact secondary action in the hero ── */
         .btn-google-maps-provider {
             display: inline-flex;
@@ -288,5 +336,106 @@
             font-size: 12px;
             flex-shrink: 0;
         }
+        .btn-provider-fav {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.35);
+            color: #fff;
+            backdrop-filter: blur(6px);
+            transition: all 0.2s ease;
+        }
+        .btn-provider-fav:hover {
+            background: rgba(255,255,255,0.22);
+            border-color: rgba(255,255,255,0.6);
+            color: #fff;
+        }
+        .btn-provider-fav.active-fav {
+            background: rgba(220, 53, 69, 0.15); /* light red tint */
+            border-color: rgba(220, 53, 69, 0.5);
+            color: #fff;
+        }
     </style>
+
+    <script>
+        var isAuth = @(User.Identity?.IsAuthenticated == true ? "true" : "false");
+        
+        async function toggleProviderFavorite(btn, placeId, placeName, placeAddress) {
+            if (!isAuth) {
+                window.location.href = '/Identity/Account/Login?ReturnUrl=' + encodeURIComponent(window.location.pathname + window.location.search);
+                return;
+            }
+
+            var icon = document.getElementById('provider-fav-icon');
+            var text = document.getElementById('provider-fav-text');
+            var isFav = btn.classList.contains('active-fav');
+            
+            // optimistically toggle UI
+            if (isFav) {
+                btn.classList.remove('active-fav');
+                icon.className = 'far fa-heart';
+                text.innerText = 'Favoritos';
+                showFavToast('<i class="fas fa-heart-broken"></i>&nbsp; Removido dos Favoritos.', '#6c757d');
+            } else {
+                btn.classList.add('active-fav');
+                icon.className = 'fas fa-heart text-danger';
+                text.innerText = 'Nos Favoritos';
+                showFavToast('<i class="fas fa-heart" style="color:#ff6b8a;"></i>&nbsp; Adicionado aos Favoritos!', 'linear-gradient(135deg,#1a1a2e,#16213e)');
+            }
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            var endpoint = isFav ? '/Barbershops/RemoveFavourite' : '/Barbershops/SaveFavourite';
+
+            try {
+                var res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({ placeId: placeId, placeName: placeName, placeAddress: placeAddress })
+                });
+
+                if (!res.ok) {
+                    console.error("Failed to toggle favorite on server.");
+                    // In a production app, we could revert the UI here if needed
+                }
+            } catch (e) {
+                console.error("Error communicating with server:", e);
+            }
+        }
+
+        function showFavToast(msg, color) {
+            var existing = document.getElementById('fav-toast-banner');
+            if (existing) existing.remove();
+
+            var toast = document.createElement('div');
+            toast.id = 'fav-toast-banner';
+            toast.style.cssText = [
+                'position:fixed', 'bottom:28px', 'left:50%', 'transform:translateX(-50%) translateY(60px)',
+                'background:' + color, 'color:#fff', 'padding:14px 28px', 'border-radius:50px',
+                'font-size:1rem', 'font-weight:600', 'z-index:9999',
+                'box-shadow:0 8px 30px rgba(0,0,0,0.25)',
+                'display:flex', 'align-items:center', 'gap:10px',
+                'transition:transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.35s ease',
+                'opacity:0', 'pointer-events:none'
+            ].join(';');
+            toast.innerHTML = msg;
+            document.body.appendChild(toast);
+
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    toast.style.transform = 'translateX(-50%) translateY(0)';
+                    toast.style.opacity = '1';
+                });
+            });
+
+            setTimeout(function() {
+                toast.style.transform = 'translateX(-50%) translateY(60px)';
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 400);
+            }, 2800);
+        }
+    </script>
 }

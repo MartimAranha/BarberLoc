@@ -63,6 +63,7 @@ namespace WebApplication1.Models
         // Navigation properties
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
         public virtual ICollection<Service> Services { get; set; } = new List<Service>();
+        public virtual ICollection<FavoriteBarbershop> FavoritedByUsers { get; set; } = new List<FavoriteBarbershop>();
     }
 
     public enum BarbershopCategory

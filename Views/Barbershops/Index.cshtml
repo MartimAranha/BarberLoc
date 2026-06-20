@@ -10,7 +10,6 @@
     }
     .map-wrapper {
         height: calc(100vh - 75px);
-        width: 100%;
         position: relative;
     }
     #map {
@@ -146,8 +145,9 @@
             calcText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> A obter coordenadas...';
 
             const fallbackToMapCenter = () => {
-                calcText.classList.add('text-danger');
-                calcText.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro na morada. A usar o centro do ecrã como referência.';
+                // Completely suppress the warning alert by hiding the text element
+                calcText.classList.add('d-none');
+                
                 if (map) {
                     const center = map.getCenter();
                     userDeliveryLat = center.lat();

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Security.Claims;
 using WebApplication1.Data;
 using WebApplication1.Models;
 using WebApplication1.Models.ViewModels;
@@ -150,6 +151,14 @@ namespace WebApplication1.Controllers
                 Lat = googleData.Lat,
                 Lng = googleData.Lng
             };
+
+            // Check if favorited by current user
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                vm.IsFavourited = await _context.FavouritePlaces
+                    .AnyAsync(f => f.UserId == userId && f.PlaceId == googleData.PlaceId);
+            }
 
             return View(vm);
         }
