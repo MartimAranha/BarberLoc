@@ -24,6 +24,13 @@ namespace WebApplication1.Models
         
         [StringLength(500)]
         public string? Notes { get; set; }
+
+        /// <summary>
+        /// Google Places place_id captured at booking time for external/live-map bookings
+        /// (where BarbershopId is null). Used to fetch live details in the Bookings modal.
+        /// </summary>
+        [StringLength(200)]
+        public string? ShopPlaceId { get; set; }
         
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         // On-site booking fields

@@ -41,13 +41,21 @@ namespace WebApplication1.Controllers
         // GET: /Barbershops/Details/5
         public async Task<IActionResult> Details(int? id)
         {
-            if (id == null) return NotFound();
+            if (id == null)
+            {
+                TempData["ErrorMessage"] = "O serviço selecionado é ao domicílio e não tem uma loja física associada, ou o identificador é inválido.";
+                return RedirectToAction(nameof(Index));
+            }
 
             var barbershop = await _context.Barbershops
                 .Include(b => b.Services)
                 .FirstOrDefaultAsync(b => b.Id == id && b.IsActive);
 
-            if (barbershop == null) return NotFound();
+            if (barbershop == null)
+            {
+                TempData["ErrorMessage"] = "A barbearia que tentou visualizar não existe ou está inativa.";
+                return RedirectToAction(nameof(Index));
+            }
 
             // Fetch live Google data
             var googleData = await _googlePlaces.GetFullPlaceDetailsAsync(barbershop.GooglePlaceId);

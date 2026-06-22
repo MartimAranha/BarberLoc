@@ -37,8 +37,8 @@ namespace WebApplication1.Controllers
             return View(bookings);
         }
 
-        // ── GET: /Bookings/Create?barbershopId={id}&shopName={name}&Notes={notes} ──
-        public async Task<IActionResult> Create(int barbershopId, string? shopName, string? Notes)
+        // ── GET: /Bookings/Create?barbershopId={id}&shopName={name}&shopPlaceId={pid}&Notes={notes} ──
+        public async Task<IActionResult> Create(int barbershopId, string? shopName, string? Notes, string? shopPlaceId)
         {
             if (barbershopId == 0)
             {
@@ -46,6 +46,7 @@ namespace WebApplication1.Controllers
                 {
                     BarbershopId = 0,
                     ShopName = shopName,
+                    ShopPlaceId = shopPlaceId,
                     Barbershop = new Barbershop { Name = shopName ?? "Serviço ao Domicílio", Address = "Localização Externa", IsActive = true },
                     Notes = Notes,
                     AvailableServices = new List<Service>()
@@ -127,15 +128,18 @@ namespace WebApplication1.Controllers
             // ── Build the Booking entity ──────────────────────────────────────
             var booking = new Booking
             {
-                UserId = user.Id,
+                UserId     = user.Id,
                 BarbershopId = vm.BarbershopId == 0 ? null : vm.BarbershopId,
-                ServiceId = vm.ServiceId,
+                ServiceId  = vm.ServiceId,
                 BookingDate = vm.BookingDate,
                 BookingTime = vm.BookingTime,
-                Notes = vm.Notes,
-                IsOnSite = vm.IsOnSite,
-                Status = BookingStatus.Pending,
-                CreatedAt = DateTime.Now
+                Notes      = vm.Notes,
+                IsOnSite   = vm.IsOnSite,
+                Status     = BookingStatus.Pending,
+                CreatedAt  = DateTime.Now,
+                // Persist the Google place_id for external/live-map bookings so the
+                // Bookings list can open the live details modal without a DB shop record.
+                ShopPlaceId = vm.BarbershopId == 0 ? vm.ShopPlaceId : null
             };
 
             // ── Compute travel fee if home service requested ─────────────────────────────────────────────

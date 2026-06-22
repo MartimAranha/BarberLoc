@@ -13,6 +13,12 @@ namespace WebApplication1.Models.ViewModels
         public int BarbershopId { get; set; }
         public string? ShopName { get; set; }
 
+        /// <summary>
+        /// Google Places place_id for external/live-map shops (BarbershopId == 0).
+        /// Passed via query-string from the map booking URL and stored on the Booking entity.
+        /// </summary>
+        public string? ShopPlaceId { get; set; }
+
         // ── Barbershop Context (populated by controller, not bound from form) ──
         public Barbershop? Barbershop { get; set; }
         public List<Service> AvailableServices { get; set; } = new();
