@@ -32,7 +32,7 @@ Bem-vindo ao **BarberLoc**, a sua solução moderna para encontrar e agendar ser
     dotnet ef database update
     ```
 
-3.  **Executar a Aplicação**:
+3.  **Executar a Aplicação(tem de ter a API KEY!)**:
     Na pasta raiz do projeto, execute:
     ```bash
     dotnet run
